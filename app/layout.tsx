@@ -7,11 +7,15 @@ export const metadata: Metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const bypassAuth = process.env.DEV_AUTH_BYPASS === 'true'
+
+  const content = (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  )
+
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body>{children}</body>
-      </html>
-    </ClerkProvider>
+    bypassAuth ? content : <ClerkProvider>{content}</ClerkProvider>
   )
 }
