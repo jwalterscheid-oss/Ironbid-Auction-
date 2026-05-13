@@ -6,6 +6,7 @@ import { db, getUserByClerkId } from '@/lib/db'
 import { publishToChannel } from '@/lib/ably'
 import { eq, and, gt } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 const HaulBidSchema = z.object({
   haulJobId:             z.string().uuid(),
@@ -19,6 +20,49 @@ const HaulBidSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  if (isMockMode) {
+    const body = HaulBidSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const state = getDevMockState()
+    const carrierId = mockUserIdForRole('carrier')
+    const job = state.haulJobs.find((j) => j.id === body.data.haulJobId && j.status === 'bidding')
+    if (!job) return NextResponse.json({ error: 'Job not found, closed, or expired' }, { status: 404 })
+
+    const existing = state.haulBids.find(
+      (bid) => bid.haulJobId === body.data.haulJobId && bid.carrierId === carrierId && bid.status === 'active'
+    )
+
+    if (existing) {
+      existing.amount = body.data.amount
+      existing.includesPermits = body.data.includesPermits
+      existing.includesPilotCar = body.data.includesPilotCar
+      existing.trailerType = body.data.trailerType
+      existing.estimatedPickupDate = body.data.estimatedPickupDate
+      existing.estimatedDeliveryDate = body.data.estimatedDeliveryDate
+      existing.carrierNotes = body.data.carrierNotes
+      return NextResponse.json(existing)
+    }
+
+    const bid = {
+      id: crypto.randomUUID(),
+      haulJobId: body.data.haulJobId,
+      carrierId,
+      amount: body.data.amount,
+      includesPermits: body.data.includesPermits,
+      includesPilotCar: body.data.includesPilotCar,
+      trailerType: body.data.trailerType,
+      estimatedPickupDate: body.data.estimatedPickupDate,
+      estimatedDeliveryDate: body.data.estimatedDeliveryDate,
+      carrierNotes: body.data.carrierNotes,
+      status: 'active' as const,
+      placedAt: new Date().toISOString(),
+    }
+
+    state.haulBids.unshift(bid)
+    return NextResponse.json(bid, { status: 201 })
+  }
+
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

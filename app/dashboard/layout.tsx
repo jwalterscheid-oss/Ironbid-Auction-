@@ -11,7 +11,7 @@ export default async function DashboardLayout({
   children: React.ReactNode
 }) {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
   if (!user) redirect('/onboarding')

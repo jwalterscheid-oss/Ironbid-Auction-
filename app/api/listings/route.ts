@@ -6,6 +6,7 @@ import { db, getUserByClerkId } from '@/lib/db'
 import * as schema from '@/lib/schema'
 import { notifyError } from '@/lib/slack'
 import { eq, desc, sql } from 'drizzle-orm'
+import { getDevMockState, isMockMode, mockUserIdForRole, nextMockLotNumber } from '@/lib/dev-mock'
 
 const CreateListingSchema = z.object({
   category:       z.enum(['excavator','bulldozer','crane','loader','truck','aerial','compactor','skid_steer']),
@@ -24,6 +25,15 @@ const CreateListingSchema = z.object({
 
 // GET — seller's own listings
 export async function GET() {
+  if (isMockMode) {
+    const state = getDevMockState()
+    const sellerId = mockUserIdForRole('seller')
+    const listings = state.listings
+      .filter((l) => l.sellerId === sellerId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    return NextResponse.json(listings)
+  }
+
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -41,6 +51,34 @@ export async function GET() {
 
 // POST — create new listing
 export async function POST(req: Request) {
+  if (isMockMode) {
+    const body = CreateListingSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const state = getDevMockState()
+    const listing = {
+      id: crypto.randomUUID(),
+      sellerId: mockUserIdForRole('seller'),
+      lotNumber: nextMockLotNumber(),
+      status: 'draft' as const,
+      category: body.data.category,
+      make: body.data.make,
+      model: body.data.model,
+      year: body.data.year,
+      serialNumber: body.data.serialNumber,
+      hours: body.data.hours,
+      weightKg: body.data.weightKg,
+      conditionGrade: body.data.conditionGrade,
+      description: body.data.description,
+      locationCity: body.data.locationCity,
+      locationState: body.data.locationState,
+      inspectionData: body.data.inspectionData,
+      createdAt: new Date().toISOString(),
+    }
+    state.listings.unshift(listing)
+    return NextResponse.json(listing, { status: 201 })
+  }
+
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

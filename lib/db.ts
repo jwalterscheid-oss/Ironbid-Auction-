@@ -1,14 +1,14 @@
 // lib/db.ts — Drizzle ORM client + typed query helpers
-import { drizzle } from 'drizzle-orm/neon-http'
-import { neon } from '@neondatabase/serverless'
+import { drizzle } from 'drizzle-orm/node-postgres'
+import { Pool } from 'pg'
 import { eq, and, gt, lt, desc, asc, sql, inArray } from 'drizzle-orm'
 import * as schema from './schema'
 import type { AuctionFilters } from '@/types'
 
 // ─── CLIENT ──────────────────────────────────────────────────────────────────
 
-const client = neon(process.env.DATABASE_URL!)
-export const db = drizzle(client, { schema })
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+export const db = drizzle(pool, { schema })
 
 // ─── USER QUERIES ─────────────────────────────────────────────────────────────
 

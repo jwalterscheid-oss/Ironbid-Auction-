@@ -4,8 +4,8 @@ import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { redis, AUCTION_KEY } from '@/lib/redis'
 import { getUserByClerkId } from '@/lib/db'
-import { bidQueue, queueEvents } from '@/workers/bid-processor'
 import { getMinIncrement } from '@/lib/auction/bid-processor'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 const PlaceBidSchema = z.object({
   auctionId: z.string().uuid(),
@@ -14,6 +14,59 @@ const PlaceBidSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  if (isMockMode) {
+    const body = PlaceBidSchema.safeParse(await req.json())
+    if (!body.success) {
+      return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+    }
+
+    const { auctionId, amount } = body.data
+    const state = getDevMockState()
+    const auction = state.auctions.find((a) => a.id === auctionId)
+    if (!auction) return NextResponse.json({ error: 'auction_not_found' }, { status: 404 })
+    if (auction.status !== 'active') return NextResponse.json({ error: 'auction_not_active' }, { status: 422 })
+
+    const minRequired = Number(auction.currentBid ?? 0) + getMinIncrement(Number(auction.currentBid ?? 0))
+    if (amount < minRequired) {
+      return NextResponse.json({ error: 'bid_too_low', minRequired, currentBid: auction.currentBid }, { status: 422 })
+    }
+
+    const bidderId = mockUserIdForRole('buyer')
+    for (const bid of state.bids) {
+      if (bid.auctionId === auctionId) bid.isWinning = false
+    }
+
+    const bid = {
+      id: crypto.randomUUID(),
+      auctionId,
+      bidderId,
+      amount,
+      bidType: 'manual' as const,
+      isWinning: true,
+      placedAt: new Date().toISOString(),
+    }
+
+    state.bids.unshift(bid)
+    auction.currentBid = amount
+    auction.currentWinnerId = bidderId
+    auction.bidCount += 1
+    if (auction.reservePrice && amount >= auction.reservePrice) auction.reserveMet = true
+
+    return NextResponse.json({
+      bid,
+      auction: {
+        id: auction.id,
+        currentBid: auction.currentBid,
+        bidCount: auction.bidCount,
+        reserveMet: auction.reserveMet,
+        endTime: auction.endTime,
+      },
+      isWinning: true,
+      wasExtended: false,
+      mocked: true,
+    })
+  }
+
   // ── Auth ──
   const { userId: clerkId } = auth()
   if (!clerkId) {
@@ -58,6 +111,7 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Enqueue bid job (serialized per auction) ──
+  const { bidQueue, queueEvents } = await import('@/workers/bid-processor')
   const job = await bidQueue.add(
     'process_bid',
     {

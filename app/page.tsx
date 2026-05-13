@@ -7,7 +7,13 @@ import { Ticker } from '@/components/layout/Ticker'
 export const revalidate = 60 // ISR: re-render every 60s
 
 export default async function HomePage() {
-  const featured = await getLiveAuctions()
+  let featured: Awaited<ReturnType<typeof getLiveAuctions>> = []
+  try {
+    featured = await getLiveAuctions()
+  } catch {
+    // Render page shell even if external DB is temporarily unavailable.
+    featured = []
+  }
 
   return (
     <main>
@@ -88,6 +94,9 @@ export default async function HomePage() {
               listing={listing}
             />
           ))}
+          {featured.length === 0 && (
+            <div className="empty-state">Featured auctions are temporarily unavailable.</div>
+          )}
         </div>
       </section>
 

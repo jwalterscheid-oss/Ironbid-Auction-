@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { publishToChannel } from '@/lib/ably'
 import { notifyHaulJobPosted, notifyError } from '@/lib/slack'
 import { z } from 'zod'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 interface AuctionListingSnapshot {
   listing?: {
@@ -30,6 +31,19 @@ const CreateHaulJobSchema = z.object({
 
 // GET — list buyer's haul jobs
 export async function GET() {
+  if (isMockMode) {
+    const state = getDevMockState()
+    const buyerId = mockUserIdForRole('buyer')
+    const jobs = state.haulJobs
+      .filter((job) => job.buyerId === buyerId)
+      .map((job) => ({
+        ...job,
+        listing: state.listings.find((listing) => listing.id === job.listingId),
+        haulBids: state.haulBids.filter((bid) => bid.haulJobId === job.id),
+      }))
+    return NextResponse.json(jobs)
+  }
+
   const { userId } = auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -54,6 +68,36 @@ export async function GET() {
 
 // POST — create a new haul job
 export async function POST(req: Request) {
+  if (isMockMode) {
+    const body = CreateHaulJobSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const state = getDevMockState()
+    const buyerId = mockUserIdForRole('buyer')
+    const listing = state.listings[0]
+    if (!listing) return NextResponse.json({ error: 'No listing available' }, { status: 404 })
+
+    const job = {
+      id: crypto.randomUUID(),
+      transactionId: body.data.transaction_id,
+      buyerId,
+      listingId: listing.id,
+      status: 'bidding' as const,
+      pickupAddress: body.data.pickup_address,
+      deliveryAddress: body.data.delivery_address,
+      trailerType: body.data.trailer_type,
+      specialRequirements: body.data.special_requirements,
+      notes: body.data.notes,
+      deliveryDeadline: body.data.delivery_deadline,
+      bidWindowHrs: Number(body.data.bid_window_hrs),
+      bidCloseTime: new Date(Date.now() + Number(body.data.bid_window_hrs) * 3600 * 1000).toISOString(),
+      createdAt: new Date().toISOString(),
+    }
+
+    state.haulJobs.unshift(job)
+    return NextResponse.json(job, { status: 201 })
+  }
+
   const { userId } = auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

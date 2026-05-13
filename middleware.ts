@@ -4,13 +4,17 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server'
 const isPublicRoute = createRouteMatcher([
   '/',
   '/auctions(.*)',
+  '/api/auctions(.*)',
   '/sign-in(.*)',
   '/sign-up(.*)',
+  '/auth/sign-in(.*)',
+  '/auth/sign-up(.*)',
   '/api/webhooks(.*)',
   '/api/ably-token(.*)',
 ])
 
 export default clerkMiddleware((auth, req) => {
+  if (process.env.DEV_AUTH_BYPASS === 'true') return
   if (!isPublicRoute(req)) auth().protect()
 })
 

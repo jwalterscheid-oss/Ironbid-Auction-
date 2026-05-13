@@ -3,10 +3,20 @@ import Redis from 'ioredis'
 
 const globalForRedis = globalThis as unknown as { redis?: Redis }
 
+function isLikelyPlaceholder(value: string) {
+  return value.includes('[') || value.includes(']') || value.includes('PASSWORD') || value.includes('HOST')
+}
+
+const configuredRedisUrl = process.env.REDIS_URL
+const redisUrl =
+  configuredRedisUrl && /^rediss?:\/\//.test(configuredRedisUrl) && !isLikelyPlaceholder(configuredRedisUrl)
+    ? configuredRedisUrl
+    : 'redis://127.0.0.1:6379'
+
 export const redis =
   globalForRedis.redis ??
-  new Redis(process.env.REDIS_URL!, {
-    maxRetriesPerRequest: 3,
+  new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
     lazyConnect: true,
   })
 
