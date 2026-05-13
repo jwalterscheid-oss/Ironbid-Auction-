@@ -1,7 +1,7 @@
 // lib/db.ts — Drizzle ORM client + typed query helpers
-import { drizzle } from 'drizzle-orm/neon-serverless'
+import { drizzle } from 'drizzle-orm/neon-http'
 import { neon } from '@neondatabase/serverless'
-import { eq, and, gt, lt, desc, asc, sql, inArray, ilike, or } from 'drizzle-orm'
+import { eq, and, gt, lt, desc, asc, sql, inArray } from 'drizzle-orm'
 import * as schema from './schema'
 import type { AuctionFilters } from '@/types'
 
@@ -96,12 +96,13 @@ export async function getAuctionByListingId(listingId: string) {
 
 export async function getActiveAuctions(filters: AuctionFilters = {}) {
   const {
-    category, make, status = 'active', minPrice, maxPrice,
-    minYear, maxYear, maxHours, locationState, auctionType,
-    page = 1, pageSize = 24, sort = 'ending_soon',
+    status = 'active',
+    page = 1,
+    pageSize = 24,
+    sort = 'ending_soon',
   } = filters
 
-  const conditions = [eq(schema.auctions.status, status as any)]
+  const conditions = [eq(schema.auctions.status, status)]
   
   const orderBy = {
     ending_soon: asc(schema.auctions.endTime),
@@ -239,6 +240,7 @@ export async function getAvailableHaulJobs(carrierProfile: {
   trailerTypes: string[]
   serviceStates: string[]
 }) {
+  void carrierProfile
   return db
     .select({ job: schema.haulJobs, listing: schema.listings })
     .from(schema.haulJobs)

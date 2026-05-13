@@ -59,7 +59,15 @@ export async function POST(req: NextRequest) {
     // Update existing bid amount
     const [updated] = await db
       .update(schema.haulBids)
-      .set({ amount: body.data.amount.toString(), ...body.data })
+      .set({
+        amount: body.data.amount.toString(),
+        includesPermits: body.data.includesPermits,
+        includesPilotCar: body.data.includesPilotCar,
+        trailerType: body.data.trailerType,
+        estimatedPickupDate: body.data.estimatedPickupDate,
+        estimatedDeliveryDate: body.data.estimatedDeliveryDate,
+        carrierNotes: body.data.carrierNotes,
+      })
       .where(eq(schema.haulBids.id, existing.id))
       .returning()
     return NextResponse.json(updated)
@@ -68,10 +76,17 @@ export async function POST(req: NextRequest) {
   const [bid] = await db
     .insert(schema.haulBids)
     .values({
-      ...body.data,
-      carrierId:  user.id,
-      status:     'active',
-      placedAt:   new Date(),
+      haulJobId: body.data.haulJobId,
+      carrierId: user.id,
+      amount: body.data.amount.toString(),
+      includesPermits: body.data.includesPermits,
+      includesPilotCar: body.data.includesPilotCar,
+      trailerType: body.data.trailerType,
+      estimatedPickupDate: body.data.estimatedPickupDate,
+      estimatedDeliveryDate: body.data.estimatedDeliveryDate,
+      carrierNotes: body.data.carrierNotes,
+      status: 'active',
+      placedAt: new Date(),
     })
     .returning()
 

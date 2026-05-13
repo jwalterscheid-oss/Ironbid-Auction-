@@ -2,13 +2,12 @@
 import { db } from '@/lib/db'
 import { redis, AUCTION_KEY, AUTOBID_KEY } from '@/lib/redis'
 import { publishToChannel } from '@/lib/ably'
-import { notifyNewBid, notifyAuctionClosed, notifyError } from '@/lib/slack'
+import { notifyNewBid, notifyAuctionClosed } from '@/lib/slack'
 import { supabaseAdmin } from '@/lib/supabase'
 import { eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
-import type { PlaceBidInput, PlaceBidResult } from '@/types'
+import type { PlaceBidResult } from '@/types'
 
-const EXTENSION_MINUTES = 3
 const MIN_INCREMENTS: [number, number][] = [
   [500_000,  5_000],
   [200_000,  2_500],
@@ -209,9 +208,9 @@ async function runAutobidEngine(auctionId: string, newBidAmount: number, manualB
       userId:  topAutobidder.userId,
       amount:  autobidAmount,
     })
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Autobid failure is non-critical — log but don't throw
-    console.warn('[AutobidEngine] Failed:', err.message)
+    console.warn('[AutobidEngine] Failed:', err instanceof Error ? err.message : err)
   }
 }
 

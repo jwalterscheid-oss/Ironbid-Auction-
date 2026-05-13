@@ -41,12 +41,12 @@ export async function POST(
   const pi = await stripe.paymentIntents.capture(job.stripePaymentIntent)
 
   // Update job status
-  await (await import('drizzle-orm')).db?.update(schema.haulJobs)
+  await db.update(schema.haulJobs)
     .set({ status: 'delivered' })
     .where(eq(schema.haulJobs.id, params.id))
 
   // Log tracking event
-  await (await import('drizzle-orm')).db?.insert(schema.haulTracking).values({
+  await db.insert(schema.haulTracking).values({
     haulJobId:  params.id,
     eventType:  'delivered',
     notes:      'Confirmed by buyer',
@@ -54,7 +54,7 @@ export async function POST(
   })
 
   const payoutAmount = toDollars(pi.amount) * 0.92 // after 8% platform fee
-  const carrierProfile = (job.awardedCarrier as any)?.carrierProfile
+  const carrierProfile = job.awardedCarrier?.carrierProfile
 
   // Notify carrier
   if (job.awardedCarrierId) {

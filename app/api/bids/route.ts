@@ -68,8 +68,7 @@ export async function POST(req: NextRequest) {
       ipAddress: req.headers.get('x-forwarded-for') ?? req.headers.get('x-real-ip') ?? 'unknown',
     },
     {
-      jobId:   `bid:${auctionId}:${user.id}:${Date.now()}`,
-      timeout: 5000,
+      jobId: `bid:${auctionId}:${user.id}:${Date.now()}`,
     }
   )
 
@@ -77,10 +76,10 @@ export async function POST(req: NextRequest) {
     // Wait for the job to finish (max 5s)
     const result = await job.waitUntilFinished(queueEvents, 5000)
     return NextResponse.json(result, { status: 200 })
-  } catch (err: any) {
+  } catch (err: unknown) {
     // Job timed out or failed — surface the error
     const failedJob = await bidQueue.getJob(job.id!)
-    const reason    = failedJob?.failedReason ?? err.message ?? 'bid_failed'
+    const reason = failedJob?.failedReason ?? (err instanceof Error ? err.message : 'bid_failed')
 
     return NextResponse.json(
       { error: reason },

@@ -1,10 +1,19 @@
 // app/api/haul-jobs/route.ts
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { publishToChannel } from '@/lib/ably'
 import { notifyHaulJobPosted, notifyError } from '@/lib/slack'
 import { z } from 'zod'
+
+interface AuctionListingSnapshot {
+  listing?: {
+    lot_number?: string
+    year?: number
+    make?: string
+    model?: string
+  } | null
+}
 
 const CreateHaulJobSchema = z.object({
   transaction_id:       z.string().uuid(),
@@ -16,11 +25,11 @@ const CreateHaulJobSchema = z.object({
   desired_pickup_date:  z.string().optional(),
   delivery_deadline:    z.string().optional(),
   max_budget:           z.number().optional(),
-  bid_window_hrs:       z.enum([6, 24, 48, 72] as const).default(24),
+  bid_window_hrs:       z.enum(['6', '24', '48', '72']).default('24'),
 })
 
 // GET — list buyer's haul jobs
-export async function GET(req: NextRequest) {
+export async function GET() {
   const { userId } = auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -44,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create a new haul job
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const { userId } = auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Calculate bid close time
-  const bidCloseTime = new Date(Date.now() + body.data.bid_window_hrs * 3600 * 1000)
+  const bidCloseTime = new Date(Date.now() + parseInt(body.data.bid_window_hrs) * 3600 * 1000)
 
   const { data: job, error } = await supabaseAdmin
     .from('haul_jobs')
@@ -87,19 +96,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
+  const auctionSnapshot = tx.auction as AuctionListingSnapshot | null | undefined
+  const listingSnapshot = auctionSnapshot?.listing
+
   // Notify matched carriers via Ably
   await publishToChannel('haul-jobs:available', 'haul_job_posted', {
     job_id: job.id,
-    lot_number: (tx.auction as any)?.listing?.lot_number,
-    equipment: `${(tx.auction as any)?.listing?.year} ${(tx.auction as any)?.listing?.make} ${(tx.auction as any)?.listing?.model}`,
+    lot_number: listingSnapshot?.lot_number,
+    equipment: `${listingSnapshot?.year ?? ''} ${listingSnapshot?.make ?? ''} ${listingSnapshot?.model ?? ''}`.trim(),
     route: `${body.data.pickup_address} → ${body.data.delivery_address}`,
     deadline: body.data.delivery_deadline,
   })
 
   await notifyHaulJobPosted({
     jobId: job.id,
-    lotNumber: (tx.auction as any)?.listing?.lot_number ?? '—',
-    equipment: `${(tx.auction as any)?.listing?.make} ${(tx.auction as any)?.listing?.model}`,
+    lotNumber: listingSnapshot?.lot_number ?? '—',
+    equipment: `${listingSnapshot?.make ?? ''} ${listingSnapshot?.model ?? ''}`.trim(),
     route: `${body.data.pickup_address} → ${body.data.delivery_address}`,
     distanceMiles: 0, // calculated async by background job
     matchedCarriers: 0,

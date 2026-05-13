@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx — Seller dashboard overview (Server Component)
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
-import { getUserByClerkId, getListingsBySeller, getUserBids } from '@/lib/db'
+import { getUserByClerkId, getListingsBySeller } from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
 import { DashboardKPIs } from '@/components/dashboard/DashboardKPIs'
 import { ActiveListingsTable } from '@/components/dashboard/ActiveListingsTable'
@@ -65,13 +65,10 @@ export default async function DashboardPage() {
       {/* Two-column layout */}
       <div className="dashboard-grid">
         {/* Active listings table */}
-        <ActiveListingsTable listings={listings as any} />
+        <ActiveListingsTable listings={listings} />
 
         {/* Recent activity feed */}
-        <RecentActivity
-          userId={user.id}
-          transactions={transactions as any}
-        />
+        <RecentActivity transactions={transactions} />
       </div>
 
       {/* KYC warning banner */}

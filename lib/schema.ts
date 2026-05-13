@@ -1,9 +1,9 @@
 // lib/schema.ts — Drizzle ORM schema (PostgreSQL)
 import {
   pgTable, uuid, varchar, text, boolean, integer, smallint,
-  numeric, timestamp, date, pgEnum, jsonb, point, index, uniqueIndex
+  numeric, timestamp, date, pgEnum, jsonb, index, uniqueIndex
 } from 'drizzle-orm/pg-core'
-import { relations, sql } from 'drizzle-orm'
+import { relations } from 'drizzle-orm'
 
 // ─── ENUMS ───────────────────────────────────────────────
 
@@ -275,3 +275,155 @@ export const notifications = pgTable('notifications', {
   sentAt:    timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
+
+export const usersRelations = relations(users, ({ many, one }) => ({
+  listings: many(listings),
+  bids: many(bids),
+  carrierProfile: one(carrierProfiles, {
+    fields: [users.id],
+    references: [carrierProfiles.userId],
+  }),
+  haulJobs: many(haulJobs, { relationName: 'haul_job_buyer' }),
+  awardedHaulJobs: many(haulJobs, { relationName: 'haul_job_awarded_carrier' }),
+  haulBids: many(haulBids),
+}))
+
+export const listingsRelations = relations(listings, ({ many, one }) => ({
+  seller: one(users, {
+    fields: [listings.sellerId],
+    references: [users.id],
+  }),
+  auction: one(auctions, {
+    fields: [listings.id],
+    references: [auctions.listingId],
+  }),
+  haulJobs: many(haulJobs),
+}))
+
+export const auctionsRelations = relations(auctions, ({ many, one }) => ({
+  listing: one(listings, {
+    fields: [auctions.listingId],
+    references: [listings.id],
+  }),
+  currentWinner: one(users, {
+    fields: [auctions.currentWinnerId],
+    references: [users.id],
+    relationName: 'auction_current_winner',
+  }),
+  winningBidder: one(users, {
+    fields: [auctions.winningBidderId],
+    references: [users.id],
+    relationName: 'auction_winning_bidder',
+  }),
+  bids: many(bids),
+  watchers: many(watchlist),
+}))
+
+export const bidsRelations = relations(bids, ({ one }) => ({
+  auction: one(auctions, {
+    fields: [bids.auctionId],
+    references: [auctions.id],
+  }),
+  bidder: one(users, {
+    fields: [bids.bidderId],
+    references: [users.id],
+  }),
+}))
+
+export const transactionsRelations = relations(transactions, ({ one }) => ({
+  auction: one(auctions, {
+    fields: [transactions.auctionId],
+    references: [auctions.id],
+  }),
+  buyer: one(users, {
+    fields: [transactions.buyerId],
+    references: [users.id],
+    relationName: 'transaction_buyer',
+  }),
+  seller: one(users, {
+    fields: [transactions.sellerId],
+    references: [users.id],
+    relationName: 'transaction_seller',
+  }),
+  haulJob: one(haulJobs, {
+    fields: [transactions.id],
+    references: [haulJobs.transactionId],
+  }),
+}))
+
+export const carrierProfilesRelations = relations(carrierProfiles, ({ one, many }) => ({
+  user: one(users, {
+    fields: [carrierProfiles.userId],
+    references: [users.id],
+  }),
+  reviews: many(carrierReviews),
+}))
+
+export const haulJobsRelations = relations(haulJobs, ({ many, one }) => ({
+  transaction: one(transactions, {
+    fields: [haulJobs.transactionId],
+    references: [transactions.id],
+  }),
+  buyer: one(users, {
+    fields: [haulJobs.buyerId],
+    references: [users.id],
+    relationName: 'haul_job_buyer',
+  }),
+  listing: one(listings, {
+    fields: [haulJobs.listingId],
+    references: [listings.id],
+  }),
+  haulBids: many(haulBids),
+  awardedCarrier: one(users, {
+    fields: [haulJobs.awardedCarrierId],
+    references: [users.id],
+    relationName: 'haul_job_awarded_carrier',
+  }),
+  tracking: many(haulTracking),
+}))
+
+export const haulBidsRelations = relations(haulBids, ({ one }) => ({
+  haulJob: one(haulJobs, {
+    fields: [haulBids.haulJobId],
+    references: [haulJobs.id],
+  }),
+  carrier: one(users, {
+    fields: [haulBids.carrierId],
+    references: [users.id],
+  }),
+}))
+
+export const haulTrackingRelations = relations(haulTracking, ({ one }) => ({
+  haulJob: one(haulJobs, {
+    fields: [haulTracking.haulJobId],
+    references: [haulJobs.id],
+  }),
+}))
+
+export const watchlistRelations = relations(watchlist, ({ one }) => ({
+  user: one(users, {
+    fields: [watchlist.userId],
+    references: [users.id],
+  }),
+  auction: one(auctions, {
+    fields: [watchlist.auctionId],
+    references: [auctions.id],
+  }),
+}))
+
+export const carrierReviewsRelations = relations(carrierReviews, ({ one }) => ({
+  haulJob: one(haulJobs, {
+    fields: [carrierReviews.haulJobId],
+    references: [haulJobs.id],
+  }),
+  reviewer: one(users, {
+    fields: [carrierReviews.reviewerId],
+    references: [users.id],
+    relationName: 'carrier_review_reviewer',
+  }),
+  carrier: one(users, {
+    fields: [carrierReviews.carrierId],
+    references: [users.id],
+    relationName: 'carrier_review_carrier',
+  }),
+}))

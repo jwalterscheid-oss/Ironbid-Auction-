@@ -5,6 +5,11 @@ import { getUserByClerkId, getCarrierEarnings, getCarrierProfile } from '@/lib/d
 import { stripe } from '@/lib/stripe'
 import type { Metadata } from 'next'
 
+interface EarningsListingSummary {
+  make?: string
+  model?: string
+}
+
 export const metadata: Metadata = { title: 'Earnings | IRONBID Carrier' }
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +35,7 @@ export default async function CarrierEarningsPage() {
   // Monthly grouping
   const byMonth: Record<string, number> = {}
   for (const { job, bid } of earnings.completed) {
-    const month = new Date(job.createdAt as any).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
+    const month = new Date(job.createdAt).toLocaleDateString('en-US', { month: 'short', year: '2-digit' })
     byMonth[month] = (byMonth[month] ?? 0) + Number(bid.amount) * 0.92
   }
 
@@ -103,7 +108,7 @@ export default async function CarrierEarningsPage() {
                     <td>{month}</td>
                     <td className="pt-amount">${net.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                     <td>{earnings.completed.filter(r =>
-                      new Date(r.job.createdAt as any).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) === month
+                      new Date(r.job.createdAt).toLocaleDateString('en-US', { month: 'short', year: '2-digit' }) === month
                     ).length}</td>
                   </tr>
                 ))}
@@ -125,14 +130,14 @@ export default async function CarrierEarningsPage() {
               {earnings.completed.map(({ job, bid }) => (
                 <tr key={job.id}>
                   <td style={{ fontFamily: 'inherit', fontSize: 12 }}>
-                    {(job as any).listing?.make} {(job as any).listing?.model}
+                    {((job as unknown as { listing?: EarningsListingSummary }).listing?.make ?? 'Equipment')} {((job as unknown as { listing?: EarningsListingSummary }).listing?.model ?? '')}
                   </td>
                   <td style={{ fontFamily: 'inherit', fontSize: 11, color: 'var(--fog)' }}>
                     {job.pickupState} → {job.deliveryState}
                   </td>
                   <td>${Number(bid.amount).toLocaleString()}</td>
                   <td className="pt-amount">${(Number(bid.amount) * 0.92).toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
-                  <td>{new Date(job.createdAt as any).toLocaleDateString()}</td>
+                  <td>{new Date(job.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>

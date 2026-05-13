@@ -84,8 +84,8 @@ export default async function HomePage() {
           {featured.map(({ auction, listing }) => (
             <AuctionCard
               key={auction.id}
-              auction={auction as any}
-              listing={listing as any}
+              auction={auction}
+              listing={listing}
             />
           ))}
         </div>
@@ -110,7 +110,7 @@ export default async function HomePage() {
 
       {/* TRUST BANNER */}
       <section className="trust-section">
-        <div className="trust-headline">Trusted by the Industry's Biggest Players</div>
+        <div className="trust-headline">Trusted by the Industry&apos;s Biggest Players</div>
         <div className="trust-stats">
           <div><div className="ts-num">99.2%</div><div className="ts-label">Transaction Success</div></div>
           <div><div className="ts-num">48hr</div><div className="ts-label">Avg Title Transfer</div></div>

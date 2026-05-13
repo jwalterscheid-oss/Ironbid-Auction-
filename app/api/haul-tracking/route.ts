@@ -7,6 +7,9 @@ import { publishToChannel } from '@/lib/ably'
 import { eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
 
+type TrackingEvent = (typeof schema.trackingEventEnum.enumValues)[number]
+type HaulJobStatus = (typeof schema.haulJobStatusEnum.enumValues)[number]
+
 const TrackingSchema = z.object({
   haulJobId:      z.string().uuid(),
   eventType:      z.enum(['bol_signed', 'picked_up', 'gps_update', 'near_destination', 'delivered']),
@@ -16,7 +19,7 @@ const TrackingSchema = z.object({
   documentUrl:    z.string().url().optional(),
 })
 
-const STATUS_MAP: Record<string, string> = {
+const STATUS_MAP: Partial<Record<TrackingEvent, HaulJobStatus>> = {
   bol_signed:       'awarded',
   picked_up:        'picked_up',
   gps_update:       'in_transit',
@@ -52,20 +55,25 @@ export async function POST(req: NextRequest) {
   const [event] = await db
     .insert(schema.haulTracking)
     .values({
-      ...body.data,
-      etaUpdated:  eta ? new Date(eta) : undefined,
-      recordedAt:  new Date(),
+      haulJobId: body.data.haulJobId,
+      eventType: body.data.eventType,
+      addressApprox: body.data.addressApprox,
+      milesRemaining: body.data.milesRemaining?.toString(),
+      notes: body.data.notes,
+      documentUrl: body.data.documentUrl,
+      etaUpdated: eta ? new Date(eta) : undefined,
+      recordedAt: new Date(),
     })
     .returning()
 
   if (newStatus && newStatus !== job.status) {
     await db.update(schema.haulJobs)
-      .set({ status: newStatus as any })
+      .set({ status: newStatus })
       .where(eq(schema.haulJobs.id, body.data.haulJobId))
   }
 
   // Broadcast to buyer
-  const eventName = `haul_${body.data.eventType}` as any
+  const eventName = `haul_${body.data.eventType}`
   await publishToChannel(`haul:${body.data.haulJobId}`, eventName, {
     ...event,
     newStatus,

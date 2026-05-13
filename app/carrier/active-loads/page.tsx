@@ -5,6 +5,12 @@ import { getUserByClerkId, getActiveLoadsForCarrier, getHaulTrackingByJob } from
 import { LogTrackingButton } from '@/components/carrier/LogTrackingButton'
 import type { Metadata } from 'next'
 
+interface LoadListingSummary {
+  year: number
+  make: string
+  model: string
+}
+
 export const metadata: Metadata = { title: 'Active Loads | IRONBID Carrier' }
 export const dynamic = 'force-dynamic'
 
@@ -39,13 +45,14 @@ export default async function ActiveLoadsPage() {
             const tracking = await getHaulTrackingByJob(job.id)
             const latestEvent = tracking[0]
             const stepIdx = TRACK_STEPS.indexOf(job.status)
+            const equipment = listing as LoadListingSummary
 
             return (
               <div key={job.id} className="load-card">
                 <div className="lc-header">
                   <div>
                     <div className="lc-name">
-                      {(listing as any).year} {(listing as any).make} {(listing as any).model}
+                      {equipment.year} {equipment.make} {equipment.model}
                     </div>
                     <div className="lc-lot">Job #{job.id.slice(0, 8).toUpperCase()}</div>
                   </div>
@@ -75,7 +82,7 @@ export default async function ActiveLoadsPage() {
                     <div className="lcd-label">Last Update</div>
                     <div className="lcd-val">
                       {latestEvent
-                        ? `${latestEvent.addressApprox ?? latestEvent.eventType} · ${new Date(latestEvent.recordedAt as any).toLocaleString()}`
+                        ? `${latestEvent.addressApprox ?? latestEvent.eventType} · ${new Date(latestEvent.recordedAt).toLocaleString()}`
                         : 'No updates yet'}
                     </div>
                   </div>

@@ -34,7 +34,7 @@ export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
     ...initialData,
     isLoading:    !initialData,
     error:        null,
-    status:       (initialData?.status as any) ?? 'active',
+    status:       initialData?.status ?? 'active',
     watcherCount: initialData?.watchCount ?? 0,
   })
 
@@ -142,9 +142,10 @@ export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
       setBidState(s => ({ ...s, isSubmitting: false, lastResult: data }))
       return { success: true, result: data as PlaceBidResult }
 
-    } catch (err: any) {
-      setBidState(s => ({ ...s, isSubmitting: false, lastError: err.message }))
-      return { success: false, error: err.message }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Bid failed'
+      setBidState(s => ({ ...s, isSubmitting: false, lastError: message }))
+      return { success: false, error: message }
     }
   }, [auctionId])
 

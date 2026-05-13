@@ -4,6 +4,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
+import { eq } from 'drizzle-orm'
 import { db, getUserByClerkId, getListingById } from '@/lib/db'
 import { redis, AUCTION_KEY } from '@/lib/redis'
 import { auctionCloseQueue } from '@/workers/bid-processor'
@@ -39,19 +40,27 @@ export async function POST(req: NextRequest) {
   const [auction] = await db
     .insert(schema.auctions)
     .values({
-      ...body.data,
-      status:     'active',
-      bidCount:   0,
+      listingId: body.data.listingId,
+      type: body.data.type,
+      status: 'active',
+      startTime: new Date(body.data.startTime),
+      endTime: new Date(body.data.endTime),
+      startingBid: body.data.startingBid.toString(),
+      reservePrice: body.data.reservePrice ? body.data.reservePrice.toString() : undefined,
+      buyNowPrice: body.data.buyNowPrice ? body.data.buyNowPrice.toString() : undefined,
+      minIncrement: body.data.minIncrement.toString(),
+      buyersPremiumPct: body.data.buyersPremiumPct.toString(),
+      bidCount: 0,
       reserveMet: !body.data.reservePrice,
       watchCount: 0,
-      viewCount:  0,
+      viewCount: 0,
     })
     .returning()
 
   // Update listing status
   await db.update(schema.listings)
     .set({ status: 'active' })
-    .where((schema.listings.id as any).equals(body.data.listingId))
+    .where(eq(schema.listings.id, body.data.listingId))
 
   // Seed Redis auction state
   await redis.hset(AUCTION_KEY(auction.id), {

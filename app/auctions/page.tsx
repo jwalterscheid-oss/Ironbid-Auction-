@@ -1,5 +1,4 @@
 // app/auctions/page.tsx — Auction catalog (Server Component + URL-based filters)
-import { Suspense } from 'react'
 import { getActiveAuctions } from '@/lib/db'
 import { AuctionCard } from '@/components/auction/AuctionCard'
 import { AuctionFiltersPanel } from '@/components/auction/AuctionFiltersPanel'
@@ -42,7 +41,7 @@ export default async function AuctionsPage({ searchParams: sp }: Props) {
     locationState: sp.state,
     page:          sp.page       ? Number(sp.page)       : 1,
     pageSize:      24,
-    sort:          sp.sort as any ?? 'ending_soon',
+    sort:          (sp.sort as AuctionFilters['sort']) ?? 'ending_soon',
   }
 
   const { data, total, page, totalPages } = await getActiveAuctions(filters)
@@ -84,8 +83,8 @@ export default async function AuctionsPage({ searchParams: sp }: Props) {
             {data.map(({ auction, listing }) => (
               <AuctionCard
                 key={auction.id}
-                auction={auction as any}
-                listing={listing as any}
+                auction={auction}
+                listing={listing}
               />
             ))}
           </div>

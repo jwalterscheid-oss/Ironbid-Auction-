@@ -1,10 +1,10 @@
 // app/api/ably-token/route.ts — Token auth for browser WebSocket clients
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { createAblyToken, createCarrierAblyToken } from '@/lib/ably'
 import { getUserByClerkId } from '@/lib/db'
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const { userId: clerkId } = auth()
   if (!clerkId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

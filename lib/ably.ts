@@ -10,10 +10,10 @@ export async function createAblyToken(userId: string) {
     capability: {
       // Buyers can subscribe to auction & haul channels
       'auction:*': ['subscribe'],
-      `haul:${userId}:*`: ['subscribe'],
+      [`haul:${userId}:*`]: ['subscribe'],
       // Private per-user channel for outbid/win notifications
-      `private:${userId}`: ['subscribe'],
-    },
+      [`private:${userId}`]: ['subscribe'],
+    } as Record<string, ("subscribe" | "publish")[]>,
   }
   return ablyServer.auth.createTokenRequest(tokenParams)
 }
@@ -24,7 +24,7 @@ export async function createCarrierAblyToken(carrierId: string) {
     capability: {
       'haul-jobs:available': ['subscribe'],
       [`carrier:${carrierId}:*`]: ['subscribe', 'publish'],
-    },
+    } as Record<string, ("subscribe" | "publish")[]>,
   }
   return ablyServer.auth.createTokenRequest(tokenParams)
 }

@@ -1,6 +1,6 @@
 // components/auction/AuctionTimer.tsx
 'use client'
-import { useCountdown, formatCountdown } from '@/hooks/useHaulJob'
+import { useCountdown, formatCountdown } from '@/hooks/useCountdown'
 
 export function AuctionTimer({ endTime, status }: { endTime: string; status: string }) {
   const cd = useCountdown(endTime)

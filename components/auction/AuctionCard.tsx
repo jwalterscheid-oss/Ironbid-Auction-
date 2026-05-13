@@ -1,8 +1,28 @@
 // components/auction/AuctionCard.tsx — Reusable auction listing card
 import Link from 'next/link'
-import type { Auction, Listing } from '@/types'
+import Image from 'next/image'
 
-interface Props { auction: Auction; listing: Listing }
+interface AuctionCardAuction {
+  id: string
+  status: string
+  endTime: string | Date
+  startingBid: string | number
+  currentBid?: string | number | null
+}
+
+interface AuctionCardListing {
+  year: number
+  make: string
+  model: string
+  hours?: number | null
+  conditionGrade?: string | null
+  locationCity?: string | null
+  locationState?: string | null
+  weightKg?: string | number | null
+  photos?: Array<{ url: string }>
+}
+
+interface Props { auction: AuctionCardAuction; listing: AuctionCardListing }
 
 const BADGE: Record<string, { label: string; cls: string }> = {
   active:    { label: '● Live',      cls: 'b-live' },
@@ -21,7 +41,7 @@ export function AuctionCard({ auction, listing }: Props) {
     <Link href={`/auctions/${auction.id}`} className="auction-card">
       <div className="ac-img">
         {photo ? (
-          <img src={photo} alt={`${listing.year} ${listing.make} ${listing.model}`} loading="lazy" />
+          <Image src={photo} alt={`${listing.year} ${listing.make} ${listing.model}`} width={640} height={480} loading="lazy" unoptimized />
         ) : (
           <div className="ac-img-placeholder">🏗️</div>
         )}

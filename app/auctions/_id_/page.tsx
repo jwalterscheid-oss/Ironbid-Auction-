@@ -105,7 +105,7 @@ export default async function AuctionPage({ params }: Props) {
         {/* Bid history — real-time feed */}
         <BidHistory
           auctionId={params.id}
-          initialBids={recentBids as any}
+          initialBids={recentBids}
           currentUserId={currentUser?.id}
         />
       </div>

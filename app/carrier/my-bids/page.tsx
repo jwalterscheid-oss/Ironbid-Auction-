@@ -5,6 +5,16 @@ import { getUserByClerkId, getHaulBidsByCarrier } from '@/lib/db'
 import { WithdrawBidButton } from '@/components/carrier/WithdrawBidButton'
 import type { Metadata } from 'next'
 
+interface ListingSummary {
+  year: number
+  make: string
+  model: string
+}
+
+interface JobWithOptionalBids {
+  haulBids?: Array<{ amount: string | number }>
+}
+
 export const metadata: Metadata = { title: 'My Bids | IRONBID Carrier' }
 export const dynamic = 'force-dynamic'
 
@@ -44,17 +54,18 @@ export default async function MyBidsPage() {
             </thead>
             <tbody>
               {active.map(({ bid, job, listing }) => {
-                const allJobBids = (job as any).haulBids ?? []
+                const allJobBids = (job as JobWithOptionalBids).haulBids ?? []
                 const lowest     = allJobBids.length > 0
-                  ? Math.min(...allJobBids.map((b: any) => Number(b.amount)))
+                  ? Math.min(...allJobBids.map(b => Number(b.amount)))
                   : null
                 const isLowest   = lowest !== null && Number(bid.amount) === lowest
+                const equipment = listing as ListingSummary
 
                 return (
                   <tr key={bid.id}>
                     <td>
                       <div className="bt-name">
-                        {(listing as any).year} {(listing as any).make} {(listing as any).model}
+                        {equipment.year} {equipment.make} {equipment.model}
                       </div>
                       <div className="bt-route">
                         {job.pickupAddress} → {job.deliveryAddress}
@@ -95,10 +106,10 @@ export default async function MyBidsPage() {
             <tbody>
               {others.map(({ bid, listing }) => (
                 <tr key={bid.id}>
-                  <td>{(listing as any).year} {(listing as any).make} {(listing as any).model}</td>
+                  <td>{(listing as ListingSummary).year} {(listing as ListingSummary).make} {(listing as ListingSummary).model}</td>
                   <td>${Number(bid.amount).toLocaleString()}</td>
                   <td><span className={`bp-${bid.status}`}>{bid.status}</span></td>
-                  <td>{new Date(bid.placedAt as any).toLocaleDateString()}</td>
+                  <td>{new Date(bid.placedAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>

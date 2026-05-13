@@ -1,8 +1,7 @@
 // components/auction/BiddingPanel.tsx — 'use client' live bidding UI
 'use client'
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { useAuction } from '@/hooks/useAuction'
-import { useCountdown, formatCountdown } from '@/hooks/useHaulJob'
 
 interface Props {
   auctionId:        string
@@ -26,12 +25,13 @@ export function BiddingPanel({
     currentBid:  initialBid,
     bidCount,
     reserveMet,
+    currentWinnerId,
     status:      'active',
-  } as any)
+  })
 
   const currentBid  = state.currentBid ?? initialBid
   const increment   = minIncrement
-  const isWinning   = currentUserId && state.currentWinnerId === currentUserId
+  const isWinning = Boolean(currentUserId && state.currentWinnerId === currentUserId)
 
   const INCREMENTS = [increment, increment * 2.5, increment * 5, increment * 10]
 
@@ -58,10 +58,13 @@ export function BiddingPanel({
   }
 
   const isClosed   = state.status === 'closed' || state.status === 'cancelled'
-  const buttonText = isClosed    ? 'AUCTION CLOSED'
-                   : justBid     ? '✓ BID CONFIRMED!'
-                   : bidState.isSubmitting ? 'PLACING BID...'
-                   : `PLACE BID — $${bidAmount.toLocaleString()}`
+  const buttonText = isClosed
+    ? 'AUCTION CLOSED'
+    : justBid
+      ? '✓ BID CONFIRMED!'
+      : bidState.isSubmitting
+        ? 'PLACING BID...'
+        : `PLACE BID — $${bidAmount.toLocaleString()}`
 
   return (
     <div className="bid-panel">
@@ -166,7 +169,7 @@ export function BiddingPanel({
           <span>${bidAmount.toLocaleString()}</span>
         </div>
         <div className="ps-row">
-          <span>Buyer's Premium ({buyersPremiumPct}%)</span>
+          <span>Buyer&apos;s Premium ({buyersPremiumPct}%)</span>
           <span>${premium.toLocaleString()}</span>
         </div>
         <div className="ps-row total">

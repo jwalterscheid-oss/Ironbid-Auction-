@@ -26,6 +26,7 @@ const NAV = [
 ]
 
 export function DashboardSidebar({ role, kycStatus }: Props) {
+  void role
   const path = usePathname()
   return (
     <aside className="sidebar">

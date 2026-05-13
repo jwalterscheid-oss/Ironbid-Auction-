@@ -3,9 +3,14 @@ import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 import { getUserByClerkId, getCarrierProfile, getActiveLoadsForCarrier,
          getHaulBidsByCarrier, getCarrierEarnings } from '@/lib/db'
-import { AvailableJobsFeed } from '@/components/carrier/AvailableJobsFeed'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+
+interface CarrierListingSummary {
+  year: number
+  make: string
+  model: string
+}
 
 export const metadata: Metadata = { title: 'Carrier Dashboard | IRONBID' }
 export const dynamic = 'force-dynamic'
@@ -26,7 +31,7 @@ export default async function CarrierOverviewPage() {
 
   const openBids     = myBids.filter(r => r.bid.status === 'active').length
   const mtdRevenue   = earnings.completed
-    .filter(r => new Date(r.job.createdAt as any) > new Date(Date.now() - 30 * 86400000))
+    .filter(r => new Date(r.job.createdAt) > new Date(Date.now() - 30 * 86400000))
     .reduce((s, r) => s + Number(r.bid.amount) * 0.92, 0)
 
   return (
@@ -74,7 +79,7 @@ export default async function CarrierOverviewPage() {
           </div>
           {activeLoads.slice(0, 2).map(({ job, listing }) => (
             <div key={job.id} className="load-summary">
-              <div className="ls-name">{(listing as any).year} {(listing as any).make} {(listing as any).model}</div>
+              <div className="ls-name">{(listing as CarrierListingSummary).year} {(listing as CarrierListingSummary).make} {(listing as CarrierListingSummary).model}</div>
               <div className="ls-route">{job.pickupAddress} → {job.deliveryAddress}</div>
               <span className={`status-pill sp-${job.status.replace('_', '-')}`}>{job.status.replace('_', ' ')}</span>
             </div>

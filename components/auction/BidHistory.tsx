@@ -9,6 +9,8 @@ interface Props {
   currentUserId?: string
 }
 
+type BidHistoryRow = Bid & { bidderMasked?: string; isCurrentUser?: boolean }
+
 export function BidHistory({ auctionId, initialBids, currentUserId }: Props) {
   const { bidHistory } = useAuction(auctionId)
   const bids = bidHistory.length > 0 ? bidHistory : initialBids
@@ -21,8 +23,9 @@ export function BidHistory({ auctionId, initialBids, currentUserId }: Props) {
       </div>
       <div className="bh-list">
         {bids.map((bid, i) => {
+          const historyBid = bid as BidHistoryRow
           const isYou = bid.bidderId === currentUserId
-          const masked = (bid as any).bidderMasked ?? bid.bidderId.slice(0,2).toUpperCase() + '***'
+          const masked = historyBid.bidderMasked ?? bid.bidderId.slice(0,2).toUpperCase() + '***'
           return (
             <div key={bid.id} className={`bh-item ${i === 0 ? 'top' : ''} ${isYou ? 'mine' : ''}`}>
               <div className={`bh-avatar ${isYou ? 'you' : ''}`}>

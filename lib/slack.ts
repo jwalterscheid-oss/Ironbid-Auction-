@@ -1,5 +1,8 @@
 // lib/slack.ts — Slack notifications for key platform events
 import { WebClient } from '@slack/web-api'
+import type { Block, KnownBlock } from '@slack/types'
+
+type SlackBlocks = Array<KnownBlock | Block>
 
 const slack = new WebClient(process.env.SLACK_BOT_TOKEN)
 
@@ -12,7 +15,7 @@ const CH = {
 } as const
 
 // ── Core post helper ──
-async function post(channel: string, text: string, blocks?: any[]) {
+async function post(channel: string, text: string, blocks?: SlackBlocks) {
   try {
     await slack.chat.postMessage({ channel, text, blocks, unfurl_links: false })
   } catch (err) {

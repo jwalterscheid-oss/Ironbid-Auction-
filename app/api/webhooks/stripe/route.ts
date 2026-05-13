@@ -1,4 +1,5 @@
 // app/api/webhooks/stripe/route.ts
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
 import { constructWebhookEvent } from '@/lib/stripe'
 import { supabaseAdmin } from '@/lib/supabase'
@@ -13,8 +14,8 @@ export async function POST(req: NextRequest) {
   let event
   try {
     event = constructWebhookEvent(rawBody, sig)
-  } catch (err: any) {
-    console.error('[Stripe Webhook] Invalid signature:', err.message)
+  } catch (err: unknown) {
+    console.error('[Stripe Webhook] Invalid signature:', err instanceof Error ? err.message : err)
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
@@ -95,10 +96,10 @@ export async function POST(req: NextRequest) {
         // Unhandled event — no-op
         break
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
     await notifyError({
       context: `Stripe webhook: ${event.type}`,
-      error: err.message,
+      error: err instanceof Error ? err.message : 'Handler error',
       severity: 'high',
       data: { eventId: event.id },
     })

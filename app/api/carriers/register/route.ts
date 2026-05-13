@@ -100,8 +100,9 @@ export async function POST(req: NextRequest) {
     const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL!
     const link = await createCarrierOnboardingLink(stripeAccount.id, origin)
     stripeOnboardingUrl = link.url
-  } catch (err: any) {
-    await notifyError({ context: 'Stripe Connect carrier setup', error: err.message, severity: 'medium' })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Stripe Connect carrier setup failed'
+    await notifyError({ context: 'Stripe Connect carrier setup', error: message, severity: 'medium' })
   }
 
   // ── Step 5: Slack notifications ──

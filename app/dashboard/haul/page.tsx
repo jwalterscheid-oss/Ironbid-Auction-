@@ -5,6 +5,12 @@ import { getUserByClerkId, getHaulJobsByBuyer } from '@/lib/db'
 import Link from 'next/link'
 import type { Metadata } from 'next'
 
+interface HaulListingSummary {
+  year: number
+  make: string
+  model: string
+}
+
 export const metadata: Metadata = { title: 'My Haul Jobs | IRONBID' }
 export const dynamic = 'force-dynamic'
 
@@ -50,13 +56,14 @@ export default async function HaulJobsPage() {
             const lowest = bids.length > 0
               ? Math.min(...bids.map(b => Number(b.amount)))
               : null
+            const equipment = job.listing as HaulListingSummary | undefined
 
             return (
               <Link key={job.id} href={`/dashboard/haul/${job.id}`} className="haul-job-card">
                 <div className="hjc-left">
                   <div className="hjc-name">
-                    {job.listing
-                      ? `${(job.listing as any).year} ${(job.listing as any).make} ${(job.listing as any).model}`
+                    {equipment
+                      ? `${equipment.year} ${equipment.make} ${equipment.model}`
                       : 'Equipment'}
                   </div>
                   <div className="hjc-route">

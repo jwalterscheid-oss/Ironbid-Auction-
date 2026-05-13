@@ -1,10 +1,13 @@
 // components/layout/TopNav.tsx — Shared top navigation bar
 import Link from 'next/link'
 import { UserButton } from '@clerk/nextjs'
-import type { User } from '@/types'
 
 interface Props {
-  user: User
+  user: {
+    companyName?: string | null
+    firstName?: string | null
+    lastName?: string | null
+  }
   portal?: 'dashboard' | 'carrier'
 }
 
@@ -26,7 +29,7 @@ export function TopNav({ user, portal = 'dashboard' }: Props) {
         {portal === 'carrier' ? (
           <CarrierNav />
         ) : (
-          <DashboardNav role={user.role} />
+          <DashboardNav />
         )}
       </div>
 
@@ -44,7 +47,7 @@ export function TopNav({ user, portal = 'dashboard' }: Props) {
   )
 }
 
-function DashboardNav({ role }: { role: string }) {
+function DashboardNav() {
   return (
     <div className="tn-nav-links">
       <Link href="/dashboard" className="tn-link">Overview</Link>

@@ -5,6 +5,17 @@ import { upsertUserFromClerk } from '@/lib/db'
 import { notifyNewUserRegistered, notifyError } from '@/lib/slack'
 import { supabaseAdmin } from '@/lib/supabase'
 
+interface ClerkWebhookEvent {
+  type: string
+  data: {
+    id: string
+    email_addresses?: Array<{ email_address?: string }>
+    first_name?: string | null
+    last_name?: string | null
+    image_url?: string | null
+  }
+}
+
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
@@ -22,10 +33,10 @@ export async function POST(req: NextRequest) {
 
   const rawBody = await req.text()
 
-  let event: any
+  let event: ClerkWebhookEvent
   try {
     const wh = new Webhook(webhookSecret)
-    event = wh.verify(rawBody, headers)
+    event = wh.verify(rawBody, headers) as ClerkWebhookEvent
   } catch {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
@@ -39,7 +50,7 @@ export async function POST(req: NextRequest) {
 
         if (!email) break
 
-        const user = await upsertUserFromClerk({
+        await upsertUserFromClerk({
           clerkId:   id,
           email,
           firstName: first_name ?? undefined,
@@ -66,10 +77,11 @@ export async function POST(req: NextRequest) {
         break
       }
     }
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Handler error'
     await notifyError({
       context:  `Clerk webhook: ${event.type}`,
-      error:    err.message,
+      error:    message,
       severity: 'high',
     }).catch(() => {})
     return NextResponse.json({ error: 'Handler error' }, { status: 500 })

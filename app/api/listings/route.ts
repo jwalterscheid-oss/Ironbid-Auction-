@@ -1,11 +1,11 @@
 // app/api/listings/route.ts — Create and list equipment listings
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { db, getUserByClerkId } from '@/lib/db'
 import * as schema from '@/lib/schema'
 import { notifyError } from '@/lib/slack'
-import { eq, desc } from 'drizzle-orm'
+import { eq, desc, sql } from 'drizzle-orm'
 
 const CreateListingSchema = z.object({
   category:       z.enum(['excavator','bulldozer','crane','loader','truck','aerial','compactor','skid_steer']),
@@ -23,7 +23,7 @@ const CreateListingSchema = z.object({
 })
 
 // GET — seller's own listings
-export async function GET(req: NextRequest) {
+export async function GET() {
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 }
 
 // POST — create new listing
-export async function POST(req: NextRequest) {
+export async function POST(req: Request) {
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
@@ -54,23 +54,37 @@ export async function POST(req: NextRequest) {
   }
 
   // Generate lot number
-  const count = await db.$count(schema.listings)
-  const lotNumber = `IB-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`
+  const [{ count }] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(schema.listings)
+  const lotNumber = `IB-${new Date().getFullYear()}-${String(Number(count) + 1).padStart(5, '0')}`
 
   try {
     const [listing] = await db
       .insert(schema.listings)
       .values({
-        ...body.data,
-        sellerId:  user.id,
+        sellerId: user.id,
         lotNumber,
-        status:    'draft',
+        status: 'draft',
+        category: body.data.category,
+        make: body.data.make,
+        model: body.data.model,
+        year: body.data.year,
+        serialNumber: body.data.serialNumber,
+        hours: body.data.hours,
+        weightKg: body.data.weightKg?.toString(),
+        conditionGrade: body.data.conditionGrade,
+        description: body.data.description,
+        locationCity: body.data.locationCity,
+        locationState: body.data.locationState,
+        inspectionData: body.data.inspectionData,
       })
       .returning()
 
     return NextResponse.json(listing, { status: 201 })
-  } catch (err: any) {
-    await notifyError({ context: 'Create listing', error: err.message, severity: 'medium' })
-    return NextResponse.json({ error: err.message }, { status: 500 })
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : 'Failed to create listing'
+    await notifyError({ context: 'Create listing', error: message, severity: 'medium' })
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 }

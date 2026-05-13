@@ -13,7 +13,6 @@ export const bidQueue = new Queue('bids', {
     removeOnComplete: true,
     removeOnFail: 1000,
     attempts: 1, // bids are never retried — idempotency issue
-    timeout: 5000,
   },
 })
 
@@ -32,7 +31,7 @@ const bidWorker = new Worker(
 
     // Re-validate at processing time (state may have changed in queue)
     const validation = await validateBid({ auctionId, userId, amount })
-    if (!validation.valid) {
+    if ('error' in validation) {
       throw new Error(validation.error)
     }
 

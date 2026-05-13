@@ -1,11 +1,14 @@
 // app/dashboard/listings/new/page.tsx — Create listing (Client Component wizard)
 'use client'
+import Image from 'next/image'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
+
 import type { Category, ConditionGrade } from '@/types'
 
 type Step = 'details' | 'condition' | 'media' | 'auction' | 'review'
+type AuctionTypeOption = { value: FormState['auctionType']; label: string; desc: string }
 
 interface FormState {
   // Step 1 — Details
@@ -17,7 +20,7 @@ interface FormState {
   hours:        number | ''
   weightKg:     number | ''
   locationCity: string
-  locationState:string
+  locationState: string
   description:  string
 
   // Step 2 — Condition
@@ -54,7 +57,7 @@ const STEPS: { id: Step; label: string }[] = [
 
 export default function NewListingPage() {
   const router         = useRouter()
-  const { user }       = useUser()
+  useUser()
   const [step, setStep] = useState<Step>('details')
   const [form, setForm] = useState<FormState>(INITIAL)
   const [loading, setLoad] = useState(false)
@@ -135,8 +138,8 @@ export default function NewListingPage() {
       const auction = await auctionRes.json()
 
       router.push(`/auctions/${auction.id}?created=1`)
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to publish auction')
     }
     setLoad(false)
   }
@@ -294,7 +297,7 @@ export default function NewListingPage() {
               <div className="photo-preview-grid">
                 {form.photos.map((f, i) => (
                   <div key={i} className="photo-thumb">
-                    <img src={URL.createObjectURL(f)} alt={`Photo ${i + 1}`} />
+                    <Image src={URL.createObjectURL(f)} alt={`Photo ${i + 1}`} width={320} height={240} unoptimized />
                     <button className="remove-photo" onClick={() => update('photos', form.photos.filter((_, j) => j !== i))}>×</button>
                   </div>
                 ))}
@@ -314,10 +317,10 @@ export default function NewListingPage() {
             <div className="form-field" style={{ marginBottom: 24 }}>
               <label>Auction Type</label>
               <div className="type-selector">
-                {[
+                {([
                   { value: 'timed',   label: 'Timed Auction',  desc: 'Set a close time — highest bid wins' },
                   { value: 'buy_now', label: 'Buy Now',         desc: 'Fixed price — first buyer wins immediately' },
-                ] as const).map(t => (
+                ] satisfies AuctionTypeOption[]).map(t => (
                   <div
                     key={t.value}
                     className={`type-card ${form.auctionType === t.value ? 'selected' : ''}`}
@@ -348,7 +351,7 @@ export default function NewListingPage() {
               {form.auctionType === 'timed' && (
                 <div className="form-field">
                   <label>Auction Duration</label>
-                  <select value={form.auctionDuration} onChange={e => update('auctionDuration', e.target.value as any)}>
+                  <select value={form.auctionDuration} onChange={e => update('auctionDuration', e.target.value as FormState['auctionDuration'])}>
                     <option value="1day">1 Day</option>
                     <option value="3day">3 Days</option>
                     <option value="7day">7 Days (recommended)</option>
@@ -361,7 +364,7 @@ export default function NewListingPage() {
             <div className="fee-summary">
               <div className="fs-title">Fee Summary</div>
               <div className="fs-row"><span>Seller Fee</span><strong>2% of final sale price</strong></div>
-              <div className="fs-row"><span>Buyer's Premium (paid by buyer)</span><strong>12%</strong></div>
+              <div className="fs-row"><span>Buyer&apos;s Premium (paid by buyer)</span><strong>12%</strong></div>
               <div className="fs-row"><span>Listing Fee</span><strong>$0</strong></div>
             </div>
           </div>
@@ -395,7 +398,7 @@ export default function NewListingPage() {
             {error && <div className="form-error">⚠ {error}</div>}
 
             <div className="review-agreement">
-              By publishing this listing you agree to IRONBID's{' '}
+              By publishing this listing you agree to IRONBID&apos;s{' '}
               <a href="/terms">Seller Terms</a> and confirm this equipment
               is free of liens and available for sale.
             </div>
