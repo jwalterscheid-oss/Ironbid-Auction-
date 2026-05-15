@@ -1,0 +1,39 @@
+name: IRONBID Production Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  healthcheck:
+    name: Healthcheck
+    runs-on: ubuntu-latest
+    env:
+      PROD_URL: ${{ secrets.PRODUCTION_URL }}
+    steps:
+      - name: Set default production URL
+        run: |
+          if [ -z "$PROD_URL" ]; then
+            echo "PROD_URL=https://ironbid-auction.vercel.app" >> $GITHUB_ENV
+          else
+            echo "PROD_URL=$PROD_URL" >> $GITHUB_ENV
+          fi
+
+      - name: Check health endpoint
+        run: |
+          set -e
+          curl -fsS "$PROD_URL/api/health" >/tmp/health.json
+          curl -fsS "$PROD_URL/api/auctions" >/tmp/auctions.json
+
+      - name: Slack alert on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.26.0
+        with:
+          channel-id: ${{ secrets.SLACK_CHANNEL_ALERTS }}
+          slack-message: |
+            🚨 IRONBID production healthcheck failed
+            URL: ${{ env.PROD_URL }}
+            Run: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}

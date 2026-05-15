@@ -62,3 +62,45 @@ See the IRONBID Setup Guide (.docx) for full step-by-step instructions.
 
 - Run `npm run build` before deploying.
 - If you see Redis connection warnings during local build, ensure production `REDIS_URL` points to your managed Redis (for example Upstash). Local `127.0.0.1:6379` is not suitable for production.
+
+## Custom Domain Setup (Item 1)
+
+1. Add your domain in Vercel:
+   - `npx vercel domains add yourdomain.com`
+2. Point DNS to Vercel as instructed in Vercel Domains settings.
+3. Update production app URL:
+   - `NEXT_PUBLIC_APP_URL=https://yourdomain.com`
+4. Redeploy production:
+   - `npx vercel --prod`
+
+## Monitoring and Alerts (Item 2)
+
+1. Health endpoint:
+   - `/api/health`
+2. Scheduled monitor workflow:
+   - `.github/workflows/monitor-prod.yml`
+3. Required GitHub secrets:
+   - `SLACK_BOT_TOKEN`
+   - `SLACK_CHANNEL_ALERTS`
+   - `PRODUCTION_URL` (optional, defaults to `https://ironbid-auction.vercel.app`)
+
+## Protected Release Workflow (Item 3)
+
+1. CI build-only workflow:
+   - `.github/workflows/ci.yml`
+2. Manual production release workflow:
+   - `.github/workflows/release.yml`
+3. Configure GitHub environment protection:
+   - Create `production` environment in GitHub
+   - Add required reviewers
+   - Add deployment secrets: `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_DEPLOYS`
+
+## Claude Support Agent
+
+1. Customer support page:
+   - `/help`
+2. Support API route:
+   - `/api/support/agent`
+3. Required env vars:
+   - `ANTHROPIC_API_KEY`
+   - `SUPPORT_AGENT_MODEL` (optional, default `claude-3-5-sonnet-latest`)
