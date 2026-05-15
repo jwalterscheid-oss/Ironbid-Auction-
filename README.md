@@ -34,6 +34,17 @@ This package uses safe names. Rename them after unzipping:
 
 See the IRONBID Setup Guide (.docx) for full step-by-step instructions.
 
+## Production Auth Checklist
+
+- Follow `docs/clerk-production-checklist.md` before each production release.
+- This prevents development Clerk keys from being used in production.
+
+## CI Safety Checks
+
+- Route guard: `npm run guard:routes`
+- Mock end-to-end smoke flow: `npm run smoke:mock-flow -- --base-url=http://127.0.0.1:3014`
+- Both checks are wired into `.github/workflows/ci.yml`.
+
 ## GitHub Transfer
 
 1. Commit and push your current branch:

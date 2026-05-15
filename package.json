@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "guard:routes": "node scripts/check-dashboard-routes.mjs",
+    "smoke:mock-flow": "node scripts/ci-smoke-flow.mjs",
     "db:generate": "drizzle-kit generate:pg",
     "db:migrate": "drizzle-kit up:pg",
     "db:studio": "drizzle-kit studio",
