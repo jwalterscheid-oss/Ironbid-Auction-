@@ -5,6 +5,7 @@ import { AuctionFiltersPanel } from '@/components/auction/AuctionFiltersPanel'
 import { AuctionSortBar } from '@/components/auction/AuctionSortBar'
 import type { AuctionFilters, Category, AuctionStatus } from '@/types'
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'Browse Auctions | IRONBID',
@@ -45,6 +46,7 @@ export default async function AuctionsPage({ searchParams: sp }: Props) {
   }
 
   const { data, total, page, totalPages } = await getActiveAuctions(filters)
+  const hasActiveFilters = Boolean(filters.category || filters.make || filters.locationState)
 
   return (
     <div className="catalog-layout">
@@ -73,10 +75,30 @@ export default async function AuctionsPage({ searchParams: sp }: Props) {
 
         {/* Grid */}
         {data.length === 0 ? (
-          <div className="empty-state">
+          <div className="empty-state catalog-empty">
             <div className="es-icon">🔍</div>
             <div className="es-title">No auctions found</div>
-            <p>Try adjusting your filters to see more results.</p>
+            <p>Try adjusting your filters or jump into a popular category below.</p>
+
+            <div className="catalog-empty-actions">
+              <Link href="/auctions" className="btn-primary">Browse all active auctions</Link>
+              {hasActiveFilters && (
+                <Link href="/auctions" className="btn-ghost">Clear all filters</Link>
+              )}
+            </div>
+
+            <div className="catalog-empty-cats">
+              {[
+                { slug: 'excavator', label: 'Excavators' },
+                { slug: 'bulldozer', label: 'Bulldozers' },
+                { slug: 'loader', label: 'Loaders' },
+                { slug: 'truck', label: 'Haul Trucks' },
+              ].map((cat) => (
+                <Link key={cat.slug} href={`/auctions?category=${cat.slug}`} className="ce-cat">
+                  {cat.label}
+                </Link>
+              ))}
+            </div>
           </div>
         ) : (
           <div className="auctions-grid">
