@@ -13,6 +13,7 @@ coverage/
 .env.test.local
 .env.production.local
 .env*.local
+.env.*.check
 
 .DS_Store
 Thumbs.db
@@ -26,3 +27,4 @@ pnpm-debug.log*
 .claude/mcp.local.json
 .claude/*.local.json
 .claude/secrets*
+.vercel

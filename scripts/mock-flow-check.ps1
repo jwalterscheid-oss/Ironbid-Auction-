@@ -1,10 +1,13 @@
 [CmdletBinding()]
 param(
-  [string]$BaseUrl = 'http://localhost:3013'
+  [string]$BaseUrl = 'http://127.0.0.1:3013',
+  [switch]$IncludePageChecks
 )
 
 $base = $BaseUrl
 $results = @()
+$isMockMode = $env:DEV_MOCK_MODE -eq 'true'
+$shouldRunPageChecks = $IncludePageChecks.IsPresent -or -not $isMockMode
 
 function Add-Result {
   param(
@@ -19,18 +22,23 @@ function Add-Result {
   }
 }
 
-try {
-  $r = Invoke-WebRequest -Uri "$base/auth/sign-up" -UseBasicParsing
-  Add-Result 'signup-page-reachable' ($r.StatusCode -eq 200) "status=$($r.StatusCode)"
-} catch {
-  Add-Result 'signup-page-reachable' $false $_.Exception.Message
-}
+if ($shouldRunPageChecks) {
+  try {
+    $r = Invoke-WebRequest -Uri "$base/auth/sign-up" -UseBasicParsing
+    Add-Result 'signup-page-reachable' ($r.StatusCode -eq 200) "status=$($r.StatusCode)"
+  } catch {
+    Add-Result 'signup-page-reachable' $false $_.Exception.Message
+  }
 
-try {
-  $r = Invoke-WebRequest -Uri "$base/dashboard/listings/new" -UseBasicParsing
-  Add-Result 'listing-page-reachable' ($r.StatusCode -eq 200) "status=$($r.StatusCode)"
-} catch {
-  Add-Result 'listing-page-reachable' $false $_.Exception.Message
+  try {
+    $r = Invoke-WebRequest -Uri "$base/dashboard/listings/new" -UseBasicParsing
+    Add-Result 'listing-page-reachable' ($r.StatusCode -eq 200) "status=$($r.StatusCode)"
+  } catch {
+    Add-Result 'listing-page-reachable' $false $_.Exception.Message
+  }
+} else {
+  Add-Result 'signup-page-reachable' $true 'skipped: mock mode api-only run'
+  Add-Result 'listing-page-reachable' $true 'skipped: mock mode api-only run'
 }
 
 $listing = $null

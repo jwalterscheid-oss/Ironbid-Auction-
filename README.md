@@ -33,3 +33,32 @@ This package uses safe names. Rename them after unzipping:
 - Vercel (deployment)
 
 See the IRONBID Setup Guide (.docx) for full step-by-step instructions.
+
+## GitHub Transfer
+
+1. Commit and push your current branch:
+	- `git add .`
+	- `git commit -m "Prepare production deploy"`
+	- `git push origin main`
+2. Confirm the repository is visible at your GitHub remote URL.
+
+## Production Deploy (Vercel)
+
+1. Link the project:
+	- `npx vercel link`
+2. Add production environment variables from `env.example` in Vercel Project Settings.
+3. Set these values for production:
+	- `NEXT_PUBLIC_APP_URL=https://<your-production-domain>`
+	- `DEV_AUTH_BYPASS=false`
+	- `DEV_MOCK_MODE=false`
+4. Deploy:
+	- `npx vercel --prod`
+5. Verify live endpoints and pages:
+	- `/auth/sign-in`
+	- `/auctions`
+	- `/api/auctions`
+
+## Build Verification
+
+- Run `npm run build` before deploying.
+- If you see Redis connection warnings during local build, ensure production `REDIS_URL` points to your managed Redis (for example Upstash). Local `127.0.0.1:6379` is not suitable for production.
