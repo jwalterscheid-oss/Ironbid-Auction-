@@ -25,8 +25,8 @@ interface AuctionCardListing {
 interface Props { auction: AuctionCardAuction; listing: AuctionCardListing }
 
 const BADGE: Record<string, { label: string; cls: string }> = {
-  active:    { label: '● Live',      cls: 'b-live' },
-  extended:  { label: '⏱ Ending',   cls: 'b-ending' },
+  active:    { label: 'LIVE',      cls: 'b-live' },
+  extended:  { label: 'ENDING',    cls: 'b-ending' },
   scheduled: { label: 'Upcoming',   cls: 'b-upcoming' },
   closed:    { label: 'Closed',     cls: 'b-closed' },
 }
@@ -43,7 +43,7 @@ export function AuctionCard({ auction, listing }: Props) {
         {photo ? (
           <Image src={photo} alt={`${listing.year} ${listing.make} ${listing.model}`} width={640} height={480} loading="lazy" unoptimized />
         ) : (
-          <div className="ac-img-placeholder">🏗️</div>
+          <div className="ac-img-placeholder">IRONBID</div>
         )}
         <div className={`ac-badge ${badge.cls}`}>{badge.label}</div>
         <button

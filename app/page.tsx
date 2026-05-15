@@ -134,17 +134,17 @@ export default async function HomePage() {
 }
 
 const CATEGORIES = [
-  { slug: 'excavator',  name: 'Excavators',   icon: '⛏️',  count: 847 },
-  { slug: 'bulldozer',  name: 'Bulldozers',   icon: '🚜',  count: 312 },
-  { slug: 'crane',      name: 'Cranes',       icon: '🏗️',  count: 204 },
-  { slug: 'loader',     name: 'Loaders',      icon: '🔄',  count: 519 },
-  { slug: 'truck',      name: 'Haul Trucks',  icon: '🚛',  count: 286 },
-  { slug: 'aerial',     name: 'Aerial Work',  icon: '📡',  count: 378 },
+  { slug: 'excavator',  name: 'Excavators',   icon: 'EX', count: 847 },
+  { slug: 'bulldozer',  name: 'Bulldozers',   icon: 'DZ', count: 312 },
+  { slug: 'crane',      name: 'Cranes',       icon: 'CR', count: 204 },
+  { slug: 'loader',     name: 'Loaders',      icon: 'LD', count: 519 },
+  { slug: 'truck',      name: 'Haul Trucks',  icon: 'HT', count: 286 },
+  { slug: 'aerial',     name: 'Aerial Work',  icon: 'AW', count: 378 },
 ]
 
 const HOW_STEPS = [
-  { icon: '📋', title: 'Register & Verify',  desc: 'Create your buyer account and complete identity and credit verification in under 10 minutes.' },
-  { icon: '🔍', title: 'Browse & Inspect',   desc: 'Review detailed specs, photos, inspection reports, and condition grades. Request third-party inspections.' },
-  { icon: '⚡', title: 'Bid Live or Auto',   desc: 'Place bids in real-time or set an autobid maximum. Get outbid alerts instantly via SMS and email.' },
-  { icon: '🤝', title: 'Win & Transfer',     desc: 'Pay securely via ACH or wire. We handle title transfer documentation and coordinate logistics.' },
+  { icon: 'ID', title: 'Register & Verify',  desc: 'Create your buyer account and complete identity and credit verification in under 10 minutes.' },
+  { icon: 'IN', title: 'Browse & Inspect',   desc: 'Review detailed specs, photos, inspection reports, and condition grades. Request third-party inspections.' },
+  { icon: 'BD', title: 'Bid Live or Auto',   desc: 'Place bids in real-time or set an autobid maximum. Get outbid alerts instantly via SMS and email.' },
+  { icon: 'WT', title: 'Win & Transfer',     desc: 'Pay securely via ACH or wire. We handle title transfer documentation and coordinate logistics.' },
 ]

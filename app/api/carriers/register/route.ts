@@ -5,7 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { createCarrierConnectAccount, createCarrierOnboardingLink } from '@/lib/stripe'
 import { notifyCarrierVerified, notifyNewUserRegistered, notifyError } from '@/lib/slack'
 import { z } from 'zod'
-import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
+import { isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 const CarrierRegisterSchema = z.object({
   company_name:      z.string().min(2),
