@@ -5,6 +5,7 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { createCarrierConnectAccount, createCarrierOnboardingLink } from '@/lib/stripe'
 import { notifyCarrierVerified, notifyNewUserRegistered, notifyError } from '@/lib/slack'
 import { z } from 'zod'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 const CarrierRegisterSchema = z.object({
   company_name:      z.string().min(2),
@@ -20,6 +21,22 @@ const CarrierRegisterSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  if (isMockMode) {
+    const body = CarrierRegisterSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const carrierId = mockUserIdForRole('carrier')
+    return NextResponse.json({
+      ok: true,
+      carrierId,
+      companyName: body.data.company_name,
+      mcNumber: body.data.mc_number,
+      stripeOnboardingUrl: 'https://connect.stripe.com/mock/onboard',
+      fmcsaStatus: 'active',
+      mocked: true,
+    })
+  }
+
   const { userId } = auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

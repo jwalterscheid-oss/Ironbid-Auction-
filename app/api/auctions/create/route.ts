@@ -9,6 +9,7 @@ import { db, getUserByClerkId, getListingById } from '@/lib/db'
 import { redis, AUCTION_KEY } from '@/lib/redis'
 import { auctionCloseQueue } from '@/workers/bid-processor'
 import * as schema from '@/lib/schema'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 const CreateAuctionSchema = z.object({
   listingId:        z.string().uuid(),
@@ -23,6 +24,41 @@ const CreateAuctionSchema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  if (isMockMode) {
+    const body = CreateAuctionSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const state = getDevMockState()
+    const sellerId = mockUserIdForRole('seller')
+    const listing = state.listings.find((l) => l.id === body.data.listingId)
+    if (!listing) return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
+    if (listing.sellerId !== sellerId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+    const auction = {
+      id: crypto.randomUUID(),
+      listingId: body.data.listingId,
+      type: body.data.type,
+      status: 'active' as const,
+      startTime: body.data.startTime,
+      endTime: body.data.endTime,
+      startingBid: body.data.startingBid,
+      reservePrice: body.data.reservePrice,
+      buyNowPrice: body.data.buyNowPrice,
+      minIncrement: body.data.minIncrement,
+      buyersPremiumPct: 12,
+      currentBid: body.data.startingBid,
+      currentWinnerId: undefined,
+      bidCount: 0,
+      reserveMet: !body.data.reservePrice,
+      watchCount: 0,
+      viewCount: 0,
+      createdAt: new Date().toISOString(),
+    }
+    state.auctions.push(auction)
+    listing.status = 'active'
+    return NextResponse.json(auction)
+  }
+
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 

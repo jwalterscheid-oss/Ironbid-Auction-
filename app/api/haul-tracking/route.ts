@@ -6,6 +6,7 @@ import { db, getUserByClerkId } from '@/lib/db'
 import { publishToChannel } from '@/lib/ably'
 import { eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
+import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
 type TrackingEvent = (typeof schema.trackingEventEnum.enumValues)[number]
 type HaulJobStatus = (typeof schema.haulJobStatusEnum.enumValues)[number]
@@ -28,6 +29,33 @@ const STATUS_MAP: Partial<Record<TrackingEvent, HaulJobStatus>> = {
 }
 
 export async function POST(req: NextRequest) {
+  if (isMockMode) {
+    const body = TrackingSchema.safeParse(await req.json())
+    if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
+
+    const state = getDevMockState()
+    const carrierId = mockUserIdForRole('carrier')
+    const job = state.haulJobs.find(
+      (j) => j.id === body.data.haulJobId && j.awardedCarrierId === carrierId
+    )
+    if (!job) return NextResponse.json({ error: 'Job not found or not assigned to you' }, { status: 404 })
+
+    const newStatus = STATUS_MAP[body.data.eventType]
+    if (newStatus) job.status = newStatus as typeof job.status
+
+    return NextResponse.json({
+      id: crypto.randomUUID(),
+      haulJobId: body.data.haulJobId,
+      eventType: body.data.eventType,
+      addressApprox: body.data.addressApprox ?? null,
+      milesRemaining: body.data.milesRemaining ?? null,
+      notes: body.data.notes ?? null,
+      recordedAt: new Date().toISOString(),
+      newJobStatus: newStatus ?? job.status,
+      mocked: true,
+    })
+  }
+
   const { userId: clerkId } = auth()
   if (!clerkId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
