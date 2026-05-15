@@ -1,10 +1,23 @@
 // lib/ably.ts — Ably server-side client + token generation
 import Ably from 'ably'
 
-export const ablyServer = new Ably.Rest(process.env.ABLY_API_KEY!)
+let ablyServer: Ably.Rest | null = null
+
+function getAblyServer() {
+  if (ablyServer) return ablyServer
+
+  const apiKey = process.env.ABLY_API_KEY
+  if (!apiKey || !apiKey.includes(':')) {
+    throw new Error('ABLY_API_KEY is missing or invalid')
+  }
+
+  ablyServer = new Ably.Rest(apiKey)
+  return ablyServer
+}
 
 // ── Generate short-lived token for browser clients ──
 export async function createAblyToken(userId: string) {
+  const client = getAblyServer()
   const tokenParams = {
     clientId: userId,
     capability: {
@@ -15,10 +28,11 @@ export async function createAblyToken(userId: string) {
       [`private:${userId}`]: ['subscribe'],
     } as Record<string, ("subscribe" | "publish")[]>,
   }
-  return ablyServer.auth.createTokenRequest(tokenParams)
+  return client.auth.createTokenRequest(tokenParams)
 }
 
 export async function createCarrierAblyToken(carrierId: string) {
+  const client = getAblyServer()
   const tokenParams = {
     clientId: carrierId,
     capability: {
@@ -26,11 +40,12 @@ export async function createCarrierAblyToken(carrierId: string) {
       [`carrier:${carrierId}:*`]: ['subscribe', 'publish'],
     } as Record<string, ("subscribe" | "publish")[]>,
   }
-  return ablyServer.auth.createTokenRequest(tokenParams)
+  return client.auth.createTokenRequest(tokenParams)
 }
 
 // ── Publish to a channel from server ──
 export async function publishToChannel(channel: string, event: string, data: object) {
-  const ch = ablyServer.channels.get(channel)
+  const client = getAblyServer()
+  const ch = client.channels.get(channel)
   return ch.publish(event, data)
 }

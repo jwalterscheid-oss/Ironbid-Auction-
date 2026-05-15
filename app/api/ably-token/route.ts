@@ -15,9 +15,16 @@ export async function GET() {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  const tokenRequest = user.role === 'carrier'
-    ? await createCarrierAblyToken(user.id)
-    : await createAblyToken(user.id)
+  try {
+    const tokenRequest = user.role === 'carrier'
+      ? await createCarrierAblyToken(user.id)
+      : await createAblyToken(user.id)
 
-  return NextResponse.json(tokenRequest)
+    return NextResponse.json(tokenRequest)
+  } catch {
+    return NextResponse.json(
+      { error: 'Realtime service unavailable' },
+      { status: 503 }
+    )
+  }
 }
