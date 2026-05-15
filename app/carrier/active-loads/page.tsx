@@ -19,10 +19,10 @@ const STEP_LABELS  = ['Booked', 'BOL Signed', 'Picked Up', 'In Transit', 'Near D
 
 export default async function ActiveLoadsPage() {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
-  if (!user) redirect('/sign-in')
+  if (!user) redirect('/auth/sign-in')
 
   const loads = await getActiveLoadsForCarrier(user.id)
 

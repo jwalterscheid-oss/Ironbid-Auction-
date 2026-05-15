@@ -26,7 +26,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
 
 export default async function HaulJobsPage() {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
   if (!user) redirect('/onboarding')

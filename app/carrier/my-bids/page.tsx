@@ -20,10 +20,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function MyBidsPage() {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
-  if (!user) redirect('/sign-in')
+  if (!user) redirect('/auth/sign-in')
 
   const allBids = await getHaulBidsByCarrier(user.id)
   const active  = allBids.filter(r => r.bid.status === 'active')

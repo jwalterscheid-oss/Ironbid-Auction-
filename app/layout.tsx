@@ -35,5 +35,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   )
 
-  return <ClerkProvider>{content}</ClerkProvider>
+  return (
+    <ClerkProvider
+      signInUrl="/auth/sign-in"
+      signUpUrl="/auth/sign-up"
+      signInFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/onboarding"
+    >
+      {content}
+    </ClerkProvider>
+  )
 }

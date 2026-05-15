@@ -9,7 +9,7 @@ import * as schema from '@/lib/schema'
 
 export async function GET(req: NextRequest) {
   const { userId: clerkId } = auth()
-  if (!clerkId) return NextResponse.redirect(new URL('/sign-in', req.url))
+  if (!clerkId) return NextResponse.redirect(new URL('/auth/sign-in', req.url))
 
   const user    = await getUserByClerkId(clerkId)
   if (!user) return NextResponse.redirect(new URL('/onboarding', req.url))

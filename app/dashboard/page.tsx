@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function DashboardPage() {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
   if (!user) redirect('/onboarding')

@@ -15,10 +15,10 @@ export const dynamic = 'force-dynamic'
 
 export default async function CarrierEarningsPage() {
   const { userId: clerkId } = auth()
-  if (!clerkId) redirect('/sign-in')
+  if (!clerkId) redirect('/auth/sign-in')
 
   const user = await getUserByClerkId(clerkId)
-  if (!user) redirect('/sign-in')
+  if (!user) redirect('/auth/sign-in')
 
   const [profile, earnings] = await Promise.all([
     getCarrierProfile(user.id),
