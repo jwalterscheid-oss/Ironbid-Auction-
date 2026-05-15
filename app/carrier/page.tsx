@@ -90,7 +90,7 @@ export default async function CarrierOverviewPage() {
       {/* Stripe Connect warning */}
       {!profile?.stripeOnboarded && (
         <div className="stripe-warning">
-          <span>⚠ Complete your Stripe Connect setup to receive payouts.</span>
+          <span>Complete your Stripe Connect setup to receive payouts.</span>
           <a href="/api/carriers/stripe-onboard" className="btn-sm">Set Up Payouts →</a>
         </div>
       )}

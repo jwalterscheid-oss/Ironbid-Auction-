@@ -74,7 +74,7 @@ export default async function DashboardPage() {
       {/* KYC warning banner */}
       {user.kycStatus === 'pending' && (
         <div className="kyc-banner">
-          <span>⚠ Your identity verification is pending.</span>
+          <span>Your identity verification is pending.</span>
           <Link href="/dashboard/verify">Complete Verification →</Link>
         </div>
       )}

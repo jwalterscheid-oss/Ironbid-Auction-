@@ -22,12 +22,12 @@ export function DashboardKPIs({ ytdRevenue, activeListings, soldItems, avgSellPr
       <div className="kpi kpi-amber">
         <div className="kpi-label">Active Listings</div>
         <div className="kpi-val">{activeListings}</div>
-        <div className="kpi-ghost">📋</div>
+        <div className="kpi-ghost">LOT</div>
       </div>
       <div className="kpi kpi-green">
         <div className="kpi-label">Items Sold (YTD)</div>
         <div className="kpi-val">{soldItems}</div>
-        <div className="kpi-ghost">✓</div>
+        <div className="kpi-ghost">SOLD</div>
       </div>
       <div className="kpi kpi-blue">
         <div className="kpi-label">Avg Sell Price</div>
@@ -35,7 +35,7 @@ export function DashboardKPIs({ ytdRevenue, activeListings, soldItems, avgSellPr
           ? `${(avgSellPrice / 1000).toFixed(0)}K`
           : avgSellPrice.toLocaleString()
         }</div>
-        <div className="kpi-ghost">~</div>
+        <div className="kpi-ghost">AVG</div>
       </div>
     </div>
   )

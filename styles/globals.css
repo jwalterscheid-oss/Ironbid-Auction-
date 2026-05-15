@@ -551,6 +551,15 @@ main { max-width: 1320px; margin: 0 auto; }
 }
 .auction-left,
 .auction-right { display: grid; gap: 12px; align-content: start; }
+.auction-right {
+  position: sticky;
+  top: 14px;
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+  padding-right: 2px;
+}
+.auction-right::-webkit-scrollbar { width: 4px; }
+.auction-right::-webkit-scrollbar-thumb { background: var(--steel); }
 
 .gallery-viewer {
   border: 1px solid rgba(255,255,255,.08);
@@ -697,6 +706,143 @@ main { max-width: 1320px; margin: 0 auto; }
 .bh-amount { font-family: var(--font-display); font-size: 24px; color: var(--amber); }
 .bh-amount.winning { color: var(--green); }
 
+/* --- DASHBOARD + CARRIER --- */
+.dashboard-page,
+.carrier-overview {
+  display: grid;
+  gap: 16px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1.1fr .9fr;
+  gap: 12px;
+}
+
+.active-listings-table,
+.recent-activity {
+  background: var(--iron);
+  border: 1px solid rgba(255,255,255,.08);
+}
+
+.alt-header,
+.ra-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+
+.alt-header h2,
+.ra-header h2 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  letter-spacing: .05em;
+  line-height: 1;
+}
+
+.alt-body,
+.ra-body {
+  display: grid;
+  gap: 2px;
+  padding: 2px;
+}
+
+.alt-row,
+.ra-row {
+  display: grid;
+  grid-template-columns: .75fr 1.3fr .75fr;
+  align-items: center;
+  gap: 8px;
+  background: var(--steel);
+  border: 1px solid rgba(255,255,255,.08);
+  padding: 10px 12px;
+}
+
+.alt-row span,
+.ra-row span {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--fog);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.alt-row strong,
+.ra-row strong {
+  color: var(--sand);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.alt-row:hover,
+.ra-row:hover {
+  border-color: rgba(200,74,26,.45);
+  transform: translateY(-1px);
+}
+
+.alt-body > p,
+.ra-body > p {
+  border: 1px solid rgba(255,255,255,.08);
+  background: var(--steel);
+  color: var(--fog);
+  font-size: 13px;
+  padding: 16px;
+}
+
+.load-summary {
+  border-top: 1px solid rgba(255,255,255,.08);
+  padding: 12px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.ls-name {
+  font-family: var(--font-display);
+  font-size: 27px;
+  line-height: .95;
+}
+
+.ls-route {
+  grid-column: 1 / 2;
+  color: var(--sand);
+  font-size: 12px;
+}
+
+.stripe-warning,
+.kyc-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid rgba(232,160,32,.38);
+  background: rgba(232,160,32,.1);
+  padding: 10px 12px;
+}
+
+.stripe-warning span,
+.kyc-banner span {
+  color: var(--amber);
+  font-size: 12px;
+}
+
+.stripe-warning a,
+.kyc-banner a {
+  color: var(--white);
+  border: 1px solid rgba(232,160,32,.4);
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stripe-warning a:hover,
+.kyc-banner a:hover {
+  background: rgba(232,160,32,.15);
+}
+
 /* --- RESPONSIVE --- */
 @media (max-width: 1100px) {
   .hero { grid-template-columns: 1fr; min-height: auto; }
@@ -704,8 +850,15 @@ main { max-width: 1320px; margin: 0 auto; }
   .categories-grid { grid-template-columns: repeat(2,1fr); }
   .how-grid { grid-template-columns: repeat(2,1fr); }
   .auction-layout { grid-template-columns: 1fr; margin: 14px; }
+  .auction-right {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
   .catalog-layout { grid-template-columns: 1fr; }
   .catalog-sidebar { border-right: 0; border-bottom: 1px solid rgba(255,255,255,.06); }
+  .dashboard-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
@@ -724,4 +877,15 @@ main { max-width: 1320px; margin: 0 auto; }
   .hero-cta { flex-direction: column; }
   .btn-lg { justify-content: center; }
   .auction-sort-bar { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .alt-row,
+  .ra-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .load-summary { grid-template-columns: 1fr; }
+  .stripe-warning,
+  .kyc-banner {
+    flex-direction: column;
+    align-items: flex-start;
+  }
 }
