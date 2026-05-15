@@ -13,14 +13,31 @@ const redisUrl =
     ? configuredRedisUrl
     : 'redis://127.0.0.1:6379'
 
+const isLocalFallbackRedis = redisUrl.includes('127.0.0.1:6379') || redisUrl.includes('localhost:6379')
+
 export const redis =
   globalForRedis.redis ??
   new Redis(redisUrl, {
     maxRetriesPerRequest: null,
     lazyConnect: true,
+    retryStrategy(times) {
+      // Avoid noisy reconnect loops when local Redis is not running in development/build.
+      if (isLocalFallbackRedis && process.env.NODE_ENV !== 'production') return null
+      return Math.min(times * 50, 2000)
+    },
   })
 
 if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis
+
+if (isLocalFallbackRedis && process.env.NODE_ENV !== 'production') {
+  let logged = false
+  redis.on('error', () => {
+    if (!logged) {
+      console.warn('[redis] Local Redis not available at 127.0.0.1:6379; continuing without reconnect retries.')
+      logged = true
+    }
+  })
+}
 
 // ── Auction state helpers ──
 export const AUCTION_KEY = (id: string) => `auction:${id}`

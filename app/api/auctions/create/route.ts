@@ -7,7 +7,6 @@ import { z } from 'zod'
 import { eq } from 'drizzle-orm'
 import { db, getUserByClerkId, getListingById } from '@/lib/db'
 import { redis, AUCTION_KEY } from '@/lib/redis'
-import { auctionCloseQueue } from '@/workers/bid-processor'
 import * as schema from '@/lib/schema'
 import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
@@ -110,6 +109,7 @@ export async function POST(req: NextRequest) {
   // Schedule auction close job
   const delay = new Date(body.data.endTime).getTime() - Date.now()
   if (delay > 0) {
+    const { auctionCloseQueue } = await import('@/workers/bid-processor')
     await auctionCloseQueue.add(
       'close_auction',
       { auctionId: auction.id },

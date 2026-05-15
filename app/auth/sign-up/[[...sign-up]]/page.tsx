@@ -1,4 +1,3 @@
-// app/(auth)/sign-up/[[...sign-up]]/page.tsx — Clerk-hosted sign up
 import { SignUp } from '@clerk/nextjs'
 
 export default function SignUpPage() {
@@ -17,17 +16,17 @@ export default function SignUpPage() {
       <SignUp
         appearance={{
           elements: {
-            rootBox:           'clerk-root',
-            card:              'clerk-card',
+            rootBox: 'clerk-root',
+            card: 'clerk-card',
             formButtonPrimary: 'clerk-btn-primary',
           },
           variables: {
-            colorPrimary:         '#c94a1a',
-            colorBackground:      '#1a1a16',
-            colorText:            '#f4f0e8',
-            colorInputText:       '#f4f0e8',
+            colorPrimary: '#c94a1a',
+            colorBackground: '#1a1a16',
+            colorText: '#f4f0e8',
+            colorInputText: '#f4f0e8',
             colorInputBackground: '#0a0a08',
-            borderRadius:         '0px',
+            borderRadius: '0px',
           },
         }}
       />

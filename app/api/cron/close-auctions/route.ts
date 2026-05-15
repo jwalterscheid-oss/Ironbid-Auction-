@@ -1,7 +1,6 @@
 // app/api/cron/close-auctions/route.ts — Vercel cron: runs every minute
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { auctionCloseQueue } from '@/workers/bid-processor'
 import { lt, eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
 
@@ -34,6 +33,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Enqueue close jobs for each expired auction
+  const { auctionCloseQueue } = await import('@/workers/bid-processor')
   await Promise.all(
     expiredAuctions.map(a =>
       auctionCloseQueue.add(
