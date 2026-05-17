@@ -92,6 +92,30 @@ export async function getCarrierBalance(stripeAccountId: string) {
   return stripe.balance.retrieve({ stripeAccount: stripeAccountId })
 }
 
+// ── Identity verification (KYC) ──
+// Creates a hosted Stripe Identity verification session. The returned
+// session.url is the hosted flow the user is redirected to; on completion
+// Stripe fires `identity.verification_session.verified`, handled in the
+// Stripe webhook to flip the user's kyc_status to 'verified'.
+export async function createIdentityVerificationSession(params: {
+  userId: string
+  email: string
+  returnUrl: string
+}) {
+  return stripe.identity.verificationSessions.create({
+    type: 'document',
+    metadata: {
+      type: 'identity_kyc',
+      user_id: params.userId,
+    },
+    options: {
+      document: { require_matching_selfie: true },
+    },
+    provided_details: { email: params.email },
+    return_url: params.returnUrl,
+  })
+}
+
 // ── Verify Stripe webhook signature ──
 export function constructWebhookEvent(rawBody: string, sig: string) {
   return stripe.webhooks.constructEvent(

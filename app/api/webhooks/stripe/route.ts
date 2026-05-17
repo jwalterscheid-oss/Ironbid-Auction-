@@ -92,6 +92,26 @@ export async function POST(req: NextRequest) {
         break
       }
 
+      // ── Identity verification passed → mark user KYC verified ──
+      case 'identity.verification_session.verified': {
+        const session = event.data.object as any
+        const userId = session.metadata?.user_id
+        if (userId) {
+          await supabaseAdmin
+            .from('users')
+            .update({ kyc_status: 'verified', updated_at: new Date().toISOString() })
+            .eq('id', userId)
+        }
+        break
+      }
+
+      // ── Identity verification needs another attempt ──
+      case 'identity.verification_session.requires_input': {
+        // The document/selfie could not be verified (e.g. unreadable image).
+        // Leave kyc_status as 'pending' so the user can retry from /dashboard/verify.
+        break
+      }
+
       default:
         // Unhandled event — no-op
         break
