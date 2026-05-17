@@ -1,6 +1,7 @@
 // components/auction/AuctionCard.tsx — Reusable auction listing card
 import Link from 'next/link'
 import Image from 'next/image'
+import { WatchButton } from './WatchButton'
 
 interface AuctionCardAuction {
   id: string
@@ -46,13 +47,7 @@ export function AuctionCard({ auction, listing }: Props) {
           <div className="ac-img-placeholder">IRONBID</div>
         )}
         <div className={`ac-badge ${badge.cls}`}>{badge.label}</div>
-        <button
-          className="ac-watch"
-          onClick={e => { e.preventDefault(); /* handled in client component */ }}
-          aria-label="Watch"
-        >
-          ♡
-        </button>
+        <WatchButton />
       </div>
 
       <div className="ac-body">
