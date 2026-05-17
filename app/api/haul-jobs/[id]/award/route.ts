@@ -100,13 +100,18 @@ export async function PATCH(
     },
   })
 
-  // Update DB atomically
-  await supabaseAdmin.rpc('award_haul_job', {
+  // Update DB atomically. If this fails, void the payment authorization so we
+  // never leave funds held on the buyer with no awarded job.
+  const { error: awardError } = await supabaseAdmin.rpc('award_haul_job', {
     p_job_id:             params.id,
     p_bid_id:             bid.id,
     p_carrier_id:         bid.carrierId,
     p_payment_intent_id:  pi.id,
   })
+  if (awardError) {
+    await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+    return NextResponse.json({ error: 'Failed to award job — payment voided' }, { status: 500 })
+  }
 
   // Notify carrier via Ably
   await publishToChannel(`carrier:${bid.carrierId}:jobs`, 'haul_job_awarded', {

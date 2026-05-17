@@ -4,10 +4,12 @@ import { useState } from 'react'
 
 interface Props { jobId: string; currentStatus: string }
 
+// Delivery is confirmed by the buyer, not the carrier — the carrier's last
+// loggable event is 'near_destination'.
 const NEXT_ACTIONS: Record<string, { event: string; label: string }[]> = {
   awarded:    [{ event: 'bol_signed', label: '📋 Sign BOL' }, { event: 'picked_up', label: '🔧 Confirm Pickup' }],
   picked_up:  [{ event: 'gps_update', label: '📍 Log GPS Update' }, { event: 'near_destination', label: '📡 Near Destination' }],
-  in_transit: [{ event: 'gps_update', label: '📍 Log GPS Update' }, { event: 'near_destination', label: '📡 Near Destination' }, { event: 'delivered', label: '🏁 Confirm Delivery' }],
+  in_transit: [{ event: 'gps_update', label: '📍 Log GPS Update' }, { event: 'near_destination', label: '📡 Near Destination' }],
 }
 
 export function LogTrackingButton({ jobId, currentStatus }: Props) {

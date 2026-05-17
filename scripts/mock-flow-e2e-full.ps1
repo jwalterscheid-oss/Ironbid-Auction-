@@ -127,7 +127,7 @@ Phase "PHASE 3 - SELLER CREATES AUCTION"
 
 Step 'SELLER' 'create-auction' {
   if (-not $script:listing) { throw 'No listing available' }
-  $script:auction = PostApi '/api/auctions/create' @{
+  $script:auction = PostApi '/api/auctions' @{
     listingId    = $script:listing.id
     type         = 'timed'
     startTime    = (Get-Date).ToUniversalTime().ToString('o')

@@ -5,7 +5,7 @@ import { db, getUserByClerkId } from '@/lib/db'
 import { stripe, toDollars } from '@/lib/stripe'
 import { publishToChannel } from '@/lib/ably'
 import { notifyHaulDelivered } from '@/lib/slack'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
 import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 
@@ -58,6 +58,18 @@ export async function POST(
   await db.update(schema.haulJobs)
     .set({ status: 'delivered' })
     .where(eq(schema.haulJobs.id, params.id))
+
+  // Close the sale: the equipment is delivered.
+  await db.update(schema.transactions)
+    .set({ closedAt: new Date(), titleStatus: 'transferred' })
+    .where(eq(schema.transactions.id, job.transactionId))
+
+  // Credit the carrier's completed-haul count for their reputation.
+  if (job.awardedCarrierId) {
+    await db.update(schema.carrierProfiles)
+      .set({ completedHauls: sql`coalesce(${schema.carrierProfiles.completedHauls}, 0) + 1` })
+      .where(eq(schema.carrierProfiles.userId, job.awardedCarrierId))
+  }
 
   // Log tracking event
   await db.insert(schema.haulTracking).values({

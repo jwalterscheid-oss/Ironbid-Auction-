@@ -69,10 +69,12 @@ export async function POST(req: NextRequest) {
       }
 
       case 'user.deleted': {
+        // Soft delete: mark the row disabled. Routes reject disabled users, and
+        // upsertUserFromClerk clears disabled_at if the person re-registers.
         const { id } = event.data
         await supabaseAdmin
           .from('users')
-          .update({ role: 'buyer', kycStatus: 'rejected' })  // soft delete
+          .update({ disabled_at: new Date().toISOString(), updated_at: new Date().toISOString() })
           .eq('clerk_id', id)
         break
       }

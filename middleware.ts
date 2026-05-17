@@ -22,7 +22,9 @@ export default clerkMiddleware((auth, req) => {
     return NextResponse.redirect(redirectUrl, 308)
   }
 
-  if (process.env.DEV_AUTH_BYPASS === 'true') return
+  // DEV_AUTH_BYPASS disables all auth — only ever honored outside production,
+  // so a leaked env var cannot expose a deployed environment.
+  if (process.env.DEV_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production') return
   if (!isPublicRoute(req)) auth().protect()
 })
 

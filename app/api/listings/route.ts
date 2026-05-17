@@ -87,15 +87,21 @@ export async function POST(req: Request) {
 
   const user = await getUserByClerkId(clerkId)
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabledAt) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
   if (!['seller','dealer','admin'].includes(user.role)) {
     return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
   }
+  if (user.kycStatus !== 'verified') {
+    return NextResponse.json(
+      { error: 'identity_verification_required', message: 'Verify your identity before creating a listing' },
+      { status: 403 }
+    )
+  }
 
-  // Generate lot number
-  const [{ count }] = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(schema.listings)
-  const lotNumber = `IB-${new Date().getFullYear()}-${String(Number(count) + 1).padStart(5, '0')}`
+  // Generate lot number from a DB sequence — race-free under concurrent creates.
+  const lotSeq = await db.execute<{ seq: string }>(sql`SELECT nextval('listing_lot_seq') AS seq`)
+  const seq = Number(lotSeq.rows[0]?.seq ?? Date.now())
+  const lotNumber = `IB-${new Date().getFullYear()}-${String(seq).padStart(5, '0')}`
 
   try {
     const [listing] = await db

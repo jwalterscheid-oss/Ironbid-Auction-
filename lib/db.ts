@@ -48,6 +48,7 @@ export async function upsertUserFromClerk(data: {
         firstName: data.firstName,
         lastName: data.lastName,
         avatarUrl: data.avatarUrl,
+        disabledAt: null, // re-activate if the account was previously deleted
         updatedAt: new Date(),
       })
       .where(eq(schema.users.clerkId, data.clerkId))
@@ -74,6 +75,7 @@ export async function upsertUserFromClerk(data: {
           firstName: data.firstName,
           lastName: data.lastName,
           avatarUrl: data.avatarUrl,
+          disabledAt: null,
           updatedAt: new Date(),
         },
       })
@@ -91,6 +93,7 @@ export async function upsertUserFromClerk(data: {
           firstName: data.firstName,
           lastName: data.lastName,
           avatarUrl: data.avatarUrl,
+          disabledAt: null,
           updatedAt: new Date(),
         })
         .where(eq(schema.users.email, normalizedEmail))
@@ -242,6 +245,33 @@ export async function getTransactionByAuction(auctionId: string) {
     .where(eq(schema.transactions.auctionId, auctionId))
     .limit(1)
   return rows[0] ?? null
+}
+
+export async function getTransactionById(id: string) {
+  return db.query.transactions.findFirst({
+    where: eq(schema.transactions.id, id),
+    with: {
+      auction: { with: { listing: true } },
+      buyer: true,
+      seller: true,
+    },
+  })
+}
+
+export async function getTransactionsByBuyer(buyerId: string) {
+  return db.query.transactions.findMany({
+    where: eq(schema.transactions.buyerId, buyerId),
+    with: { auction: { with: { listing: true } } },
+    orderBy: desc(schema.transactions.createdAt),
+  })
+}
+
+export async function getTransactionsBySeller(sellerId: string) {
+  return db.query.transactions.findMany({
+    where: eq(schema.transactions.sellerId, sellerId),
+    with: { auction: { with: { listing: true } } },
+    orderBy: desc(schema.transactions.createdAt),
+  })
 }
 
 export async function getPendingTransactions() {

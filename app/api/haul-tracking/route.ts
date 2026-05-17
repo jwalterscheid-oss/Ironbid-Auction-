@@ -11,9 +11,13 @@ import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 type TrackingEvent = (typeof schema.trackingEventEnum.enumValues)[number]
 type HaulJobStatus = (typeof schema.haulJobStatusEnum.enumValues)[number]
 
+// 'delivered' is intentionally NOT carrier-loggable — only the buyer can
+// confirm delivery (via /api/haul-jobs/[id]/confirm-delivery), which is what
+// releases the escrowed payment. Letting a carrier self-confirm would both
+// bypass payment capture and deadlock the buyer's confirmation.
 const TrackingSchema = z.object({
   haulJobId:      z.string().uuid(),
-  eventType:      z.enum(['bol_signed', 'picked_up', 'gps_update', 'near_destination', 'delivered']),
+  eventType:      z.enum(['bol_signed', 'picked_up', 'gps_update', 'near_destination']),
   addressApprox:  z.string().optional(),
   milesRemaining: z.number().optional(),
   notes:          z.string().optional(),
@@ -21,11 +25,15 @@ const TrackingSchema = z.object({
 })
 
 const STATUS_MAP: Partial<Record<TrackingEvent, HaulJobStatus>> = {
-  bol_signed:       'awarded',
   picked_up:        'picked_up',
   gps_update:       'in_transit',
   near_destination: 'in_transit',
-  delivered:        'delivered',
+}
+
+// Forward-only status ranking — a tracking event may advance the job status
+// but never regress it.
+const STATUS_RANK: Record<HaulJobStatus, number> = {
+  open: 0, bidding: 1, awarded: 2, picked_up: 3, in_transit: 4, delivered: 5, cancelled: -1,
 }
 
 export async function POST(req: NextRequest) {
@@ -94,7 +102,12 @@ export async function POST(req: NextRequest) {
     })
     .returning()
 
-  if (newStatus && newStatus !== job.status) {
+  const shouldAdvance =
+    !!newStatus &&
+    newStatus !== job.status &&
+    STATUS_RANK[newStatus] > STATUS_RANK[job.status]
+
+  if (shouldAdvance) {
     await db.update(schema.haulJobs)
       .set({ status: newStatus })
       .where(eq(schema.haulJobs.id, body.data.haulJobId))
@@ -104,7 +117,7 @@ export async function POST(req: NextRequest) {
   const eventName = `haul_${body.data.eventType}`
   await publishToChannel(`haul:${body.data.haulJobId}`, eventName, {
     ...event,
-    newStatus,
+    newStatus: shouldAdvance ? newStatus : job.status,
     etaUpdated: eta,
   })
 

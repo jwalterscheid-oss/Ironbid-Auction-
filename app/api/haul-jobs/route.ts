@@ -126,11 +126,20 @@ export async function POST(req: Request) {
   const { data: job, error } = await supabaseAdmin
     .from('haul_jobs')
     .insert({
-      ...body.data,
-      buyer_id: user.id,
-      listing_id: tx.listing_id,
-      status: 'bidding',
-      bid_close_time: bidCloseTime.toISOString(),
+      transaction_id:       body.data.transaction_id,
+      buyer_id:             user.id,
+      listing_id:           tx.listing_id,
+      status:               'bidding',
+      pickup_address:       body.data.pickup_address,
+      delivery_address:     body.data.delivery_address,
+      trailer_type:         body.data.trailer_type,
+      special_requirements: body.data.special_requirements,
+      notes:                body.data.notes ?? null,
+      desired_pickup_date:  body.data.desired_pickup_date ?? null,
+      delivery_deadline:    body.data.delivery_deadline ?? null,
+      max_budget:           body.data.max_budget ?? null,
+      bid_window_hrs:       Number(body.data.bid_window_hrs),
+      bid_close_time:       bidCloseTime.toISOString(),
     })
     .select()
     .single()

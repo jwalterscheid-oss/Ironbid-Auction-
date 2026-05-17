@@ -58,13 +58,15 @@ See the IRONBID Setup Guide (.docx) for full step-by-step instructions.
 1. Link the project:
 	- `npx vercel link`
 2. Add production environment variables from `env.example` in Vercel Project Settings.
-3. Set these values for production:
+3. For Stripe Identity/KYC, enable Identity in the Stripe Dashboard and subscribe your webhook endpoint to `identity.verification_session.verified` and `identity.verification_session.requires_input` (or all events).
+4. Set these values for production:
 	- `NEXT_PUBLIC_APP_URL=https://<your-production-domain>`
 	- `DEV_AUTH_BYPASS=false`
 	- `DEV_MOCK_MODE=false`
-4. Deploy:
+	- `STRIPE_SECRET_KEY` must be a real `sk_test_...` or `sk_live_...` key; placeholder values like `mk_...` will fail verification calls.
+5. Deploy:
 	- `npx vercel --prod`
-5. Verify live endpoints and pages:
+6. Verify live endpoints and pages:
 	- `/auth/sign-in`
 	- `/auctions`
 	- `/api/auctions`

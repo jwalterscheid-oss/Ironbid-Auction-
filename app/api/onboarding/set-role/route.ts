@@ -9,8 +9,10 @@ import { isMockMode } from '@/lib/dev-mock'
 
 export async function POST(req: NextRequest) {
   try {
+    // 'dealer' and 'admin' are privileged roles granted out-of-band, never
+    // self-assigned during onboarding.
     const parsed = z.object({
-      role: z.enum(['buyer', 'seller', 'dealer', 'carrier']),
+      role: z.enum(['buyer', 'seller', 'carrier']),
     }).safeParse(await req.json())
 
     if (!parsed.success) {
@@ -18,7 +20,8 @@ export async function POST(req: NextRequest) {
     }
 
     const { role } = parsed.data
-    const devAuthBypass = process.env.DEV_AUTH_BYPASS === 'true'
+    const devAuthBypass =
+      process.env.DEV_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production'
 
     if (isMockMode) {
       return NextResponse.json({ ok: true, mocked: true, role })

@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { eq } from 'drizzle-orm'
-import { db, getActiveAuctions, getListingById, getUserByClerkId } from '@/lib/db'
+import { db, getActiveAuctions, getAuctionByListingId, getListingById, getUserByClerkId } from '@/lib/db'
+import { redis, AUCTION_KEY } from '@/lib/redis'
 import * as schema from '@/lib/schema'
 import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
 import type { AuctionFilters, AuctionStatus, AuctionType, Category } from '@/types'
@@ -24,6 +25,14 @@ const CreateAuctionSchema = z.object({
   minIncrement: z.number().positive().default(500),
   buyersPremiumPct: z.number().min(0).max(50).default(12),
 })
+  .refine((d) => d.type !== 'buy_now' || d.buyNowPrice != null, {
+    message: 'buyNowPrice is required for buy_now auctions',
+    path: ['buyNowPrice'],
+  })
+  .refine((d) => new Date(d.endTime) > new Date(d.startTime), {
+    message: 'endTime must be after startTime',
+    path: ['endTime'],
+  })
 
 function parseEnum<T extends string>(value: string | null, values: readonly T[]): T | undefined {
   return value && values.includes(value as T) ? (value as T) : undefined
@@ -128,10 +137,25 @@ export async function POST(req: NextRequest) {
 
   const user = await getUserByClerkId(clerkId)
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabledAt) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
+  if (!['seller', 'dealer', 'admin'].includes(user.role)) {
+    return NextResponse.json({ error: 'Seller account required' }, { status: 403 })
+  }
+  if (user.kycStatus !== 'verified') {
+    return NextResponse.json(
+      { error: 'identity_verification_required', message: 'Verify your identity before launching an auction' },
+      { status: 403 }
+    )
+  }
 
   const listing = await getListingById(body.data.listingId)
   if (!listing) return NextResponse.json({ error: 'Listing not found' }, { status: 404 })
   if (listing.sellerId !== user.id) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const existingAuction = await getAuctionByListingId(body.data.listingId)
+  if (existingAuction) {
+    return NextResponse.json({ error: 'Listing already has an auction' }, { status: 409 })
+  }
 
   const [auction] = await db
     .insert(schema.auctions)
@@ -146,6 +170,7 @@ export async function POST(req: NextRequest) {
       buyNowPrice: body.data.buyNowPrice ? body.data.buyNowPrice.toString() : undefined,
       minIncrement: body.data.minIncrement.toString(),
       buyersPremiumPct: body.data.buyersPremiumPct.toString(),
+      currentBid: body.data.startingBid.toString(),
       bidCount: 0,
       reserveMet: !body.data.reservePrice,
       watchCount: 0,
@@ -157,6 +182,35 @@ export async function POST(req: NextRequest) {
     .update(schema.listings)
     .set({ status: 'active' })
     .where(eq(schema.listings.id, body.data.listingId))
+
+  // Seed Redis auction state for the live bidding pre-checks.
+  try {
+    await redis.hset(AUCTION_KEY(auction.id), {
+      current_bid: body.data.startingBid.toString(),
+      bid_count:   '0',
+      status:      'active',
+      end_time:    new Date(body.data.endTime).getTime().toString(),
+      reserve_met: body.data.reservePrice ? '0' : '1',
+    })
+  } catch (err) {
+    console.warn('[auctions] Redis seed failed (non-fatal):', err instanceof Error ? err.message : err)
+  }
+
+  // Schedule the close job so the auction settles automatically at endTime.
+  // The close-auctions cron is the safety net if the queue is unavailable.
+  try {
+    const delay = new Date(body.data.endTime).getTime() - Date.now()
+    if (delay > 0) {
+      const { auctionCloseQueue } = await import('@/workers/bid-processor')
+      await auctionCloseQueue.add(
+        'close_auction',
+        { auctionId: auction.id },
+        { delay, jobId: `close:${auction.id}` }
+      )
+    }
+  } catch (err) {
+    console.warn('[auctions] close-job scheduling failed (cron will cover):', err instanceof Error ? err.message : err)
+  }
 
   return NextResponse.json(auction, { status: 201 })
 }

@@ -3,7 +3,7 @@ import {
   pgTable, uuid, varchar, text, boolean, integer, smallint,
   numeric, timestamp, date, pgEnum, jsonb, index, uniqueIndex
 } from 'drizzle-orm/pg-core'
-import { relations } from 'drizzle-orm'
+import { relations, sql } from 'drizzle-orm'
 
 // ─── ENUMS ───────────────────────────────────────────────
 
@@ -39,10 +39,18 @@ export const users = pgTable('users', {
   creditVerified:    boolean('credit_verified').default(false),
   bidLimit:          numeric('bid_limit', { precision: 14, scale: 2 }),
   stripeCustomerId:  varchar('stripe_customer_id', { length: 100 }),
+  // Seller payout account (Stripe Connect Express). Distinct from the
+  // carrier Connect account stored on carrier_profiles.
+  stripeConnectAccountId:  varchar('stripe_connect_account_id', { length: 100 }),
+  stripeConnectOnboarded:  boolean('stripe_connect_onboarded').default(false),
+  // Stripe Identity verification session correlation.
+  stripeIdentitySessionId: varchar('stripe_identity_session_id', { length: 100 }),
   sellerRating:      numeric('seller_rating', { precision: 3, scale: 2 }),
   totalSales:        integer('total_sales').default(0),
   isVerifiedDealer:  boolean('is_verified_dealer').default(false),
   avatarUrl:         text('avatar_url'),
+  // Soft-delete marker. Set when the Clerk account is deleted; gates auth.
+  disabledAt:        timestamp('disabled_at', { withTimezone: true }),
   createdAt:         timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt:         timestamp('updated_at', { withTimezone: true }).defaultNow(),
 }, (t) => ({
@@ -126,6 +134,10 @@ export const bids = pgTable('bids', {
   auctionIdx: index('bids_auction_idx').on(t.auctionId),
   bidderIdx:  index('bids_bidder_idx').on(t.bidderId),
   winningIdx: index('bids_winning_idx').on(t.isWinning),
+  // At most one winning bid per auction — enforced at the DB level.
+  oneWinnerIdx: uniqueIndex('bids_one_winner_idx')
+    .on(t.auctionId)
+    .where(sql`${t.isWinning} = true`),
 }))
 
 // ─── TRANSACTIONS ────────────────────────────────────────
@@ -143,9 +155,15 @@ export const transactions = pgTable('transactions', {
   paymentMethod:       varchar('payment_method', { length: 20 }),
   paymentStatus:       paymentStatusEnum('payment_status').notNull().default('pending'),
   stripePaymentIntent: varchar('stripe_payment_intent', { length: 100 }),
+  stripeCheckoutSession: varchar('stripe_checkout_session', { length: 100 }),
+  // Seller payout (Stripe transfer to the seller's Connect account).
+  sellerPayoutId:      varchar('seller_payout_id', { length: 100 }),
+  sellerPaidAt:        timestamp('seller_paid_at', { withTimezone: true }),
   titleStatus:         titleStatusEnum('title_status').default('pending'),
   dueDate:             timestamp('due_date', { withTimezone: true }),
   paidAt:              timestamp('paid_at', { withTimezone: true }),
+  // Set when the equipment is delivered and the sale is fully closed.
+  closedAt:            timestamp('closed_at', { withTimezone: true }),
   createdAt:           timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   paymentStatusIdx: index('tx_payment_status_idx').on(t.paymentStatus),

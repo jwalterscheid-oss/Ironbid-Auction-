@@ -40,6 +40,9 @@ export default async function HaulJobsPage() {
           <h1 className="page-title">My Haul <span>Jobs</span></h1>
           <p className="page-sub">{jobs.length} job{jobs.length !== 1 ? 's' : ''} total</p>
         </div>
+        <Link href="/dashboard/haul/new" className="btn-primary">
+          + REQUEST A HAUL
+        </Link>
       </div>
 
       {jobs.length === 0 ? (
@@ -47,6 +50,9 @@ export default async function HaulJobsPage() {
           <div className="es-icon">🚛</div>
           <div className="es-title">No haul jobs yet</div>
           <p>After winning an auction and paying, you can post a haul job to get carrier bids for transport.</p>
+          <div style={{ marginTop: '14px' }}>
+            <Link href="/dashboard/haul/new" className="btn-primary">Request a Haul</Link>
+          </div>
         </div>
       ) : (
         <div className="haul-jobs-list">

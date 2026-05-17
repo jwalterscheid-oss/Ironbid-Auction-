@@ -26,6 +26,16 @@ export default async function ActiveLoadsPage() {
 
   const loads = await getActiveLoadsForCarrier(user.id)
 
+  // Fetch per-load tracking data BEFORE rendering so the JSX maps over a
+  // plain resolved array (rendering Promises directly is not valid).
+  const loadsWithTracking = await Promise.all(
+    loads.map(async ({ job, listing }) => ({
+      job,
+      listing,
+      tracking: await getHaulTrackingByJob(job.id),
+    }))
+  )
+
   return (
     <div className="active-loads-page">
       <div className="page-header">
@@ -41,8 +51,7 @@ export default async function ActiveLoadsPage() {
         </div>
       ) : (
         <div className="loads-list">
-          {loads.map(async ({ job, listing }) => {
-            const tracking = await getHaulTrackingByJob(job.id)
+          {loadsWithTracking.map(({ job, listing, tracking }) => {
             const latestEvent = tracking[0]
             const stepIdx = TRACK_STEPS.indexOf(job.status)
             const equipment = listing as LoadListingSummary

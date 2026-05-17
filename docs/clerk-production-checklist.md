@@ -20,17 +20,24 @@ Set these in Vercel Project Settings -> Environment Variables for Production:
 - `CLERK_SECRET_KEY=sk_live_...`
 - `DEV_AUTH_BYPASS=false`
 - `DEV_MOCK_MODE=false`
+- `STRIPE_SECRET_KEY=sk_live_...` or `sk_test_...` (not a placeholder like `mk_...`)
 
 Then redeploy production.
 
-## 3. Post-Deploy Verification
+## 3. Stripe Identity
+
+- In the Stripe Dashboard, enable Identity under Dashboard -> Identity.
+- Ensure your webhook endpoint subscribes to `identity.verification_session.verified` and `identity.verification_session.requires_input`.
+- If you prefer, subscribe to all events and keep the webhook handler filtering the events it needs.
+
+## 4. Post-Deploy Verification
 
 - Open `https://ironbid-auction.vercel.app/auth/sign-in`
 - Open `https://ironbid-auction.vercel.app/auth/sign-up`
 - Sign in and open `https://ironbid-auction.vercel.app/dashboard`
 - Confirm browser console no longer logs "Clerk has been loaded with development keys"
 
-## 4. Safe Rollback Plan
+## 5. Safe Rollback Plan
 
 - Keep previous production deployment URL available in Vercel.
 - If auth breaks after key swap, rollback from Vercel Deployments.
