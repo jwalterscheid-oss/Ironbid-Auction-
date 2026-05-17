@@ -37,20 +37,72 @@ export async function upsertUserFromClerk(data: {
   lastName?: string
   avatarUrl?: string
 }) {
+  const normalizedEmail = data.email.trim().toLowerCase()
   const existing = await getUserByClerkId(data.clerkId)
   if (existing) {
     const [updated] = await db
       .update(schema.users)
-      .set({ ...data, updatedAt: new Date() })
+      .set({
+        clerkId: data.clerkId,
+        email: normalizedEmail,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        avatarUrl: data.avatarUrl,
+        updatedAt: new Date(),
+      })
       .where(eq(schema.users.clerkId, data.clerkId))
       .returning()
     return updated
   }
-  const [created] = await db
-    .insert(schema.users)
-    .values({ ...data, role: 'buyer', kycStatus: 'pending' })
-    .returning()
-  return created
+
+  try {
+    const [createdOrUpdated] = await db
+      .insert(schema.users)
+      .values({
+        clerkId: data.clerkId,
+        email: normalizedEmail,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        avatarUrl: data.avatarUrl,
+        role: 'buyer',
+        kycStatus: 'pending',
+      })
+      .onConflictDoUpdate({
+        target: schema.users.clerkId,
+        set: {
+          email: normalizedEmail,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          avatarUrl: data.avatarUrl,
+          updatedAt: new Date(),
+        },
+      })
+      .returning()
+
+    return createdOrUpdated
+  } catch (error) {
+    // If the email already exists for another row, reconcile that row to this Clerk identity.
+    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
+      const [updatedByEmail] = await db
+        .update(schema.users)
+        .set({
+          clerkId: data.clerkId,
+          email: normalizedEmail,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          avatarUrl: data.avatarUrl,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.users.email, normalizedEmail))
+        .returning()
+
+      if (updatedByEmail) {
+        return updatedByEmail
+      }
+    }
+
+    throw error
+  }
 }
 
 // ─── LISTING QUERIES ──────────────────────────────────────────────────────────

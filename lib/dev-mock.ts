@@ -21,6 +21,12 @@ type MockListing = {
   make: string
   model: string
   year: number
+  serialNumber?: string
+  hours?: number
+  weightKg?: number
+  conditionGrade?: string
+  inspectionData?: Record<string, 'pass' | 'fair' | 'fail'>
+  photos?: Array<{ url: string; order: number; caption?: string }>
   description?: string
   locationCity?: string
   locationState?: string
@@ -121,6 +127,7 @@ function createInitialState(): DevMockState {
         locationCity: 'Dallas',
         locationState: 'TX',
         description: 'Mock listing for local development flow testing.',
+        photos: [],
         createdAt: now,
       },
     ],

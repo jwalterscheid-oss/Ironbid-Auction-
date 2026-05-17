@@ -14,20 +14,23 @@ interface Props {
   currentUserId?:   string
   currentWinnerId?: string
   isVerified:       boolean
+  realtimeEnabled?: boolean
 }
 
 export function BiddingPanel({
   auctionId, initialBid, bidCount, buyersPremiumPct,
   reserveMet, minIncrement, buyNowPrice, currentUserId,
-  currentWinnerId, isVerified,
+  currentWinnerId, isVerified, realtimeEnabled,
 }: Props) {
+  const resolvedRealtimeEnabled = realtimeEnabled ?? Boolean(currentUserId)
+
   const { state, bidState, placeBid } = useAuction(auctionId, {
     currentBid:  initialBid,
     bidCount,
     reserveMet,
     currentWinnerId,
     status:      'active',
-  })
+  }, { realtimeEnabled: resolvedRealtimeEnabled })
 
   const currentBid  = state.currentBid ?? initialBid
   const increment   = minIncrement

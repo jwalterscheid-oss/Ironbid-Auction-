@@ -17,6 +17,10 @@ interface UseBidState {
   lastResult:    PlaceBidResult | null
 }
 
+interface UseAuctionOptions {
+  realtimeEnabled?: boolean
+}
+
 let ablyClient: Ably.Realtime | null = null
 
 function getAblyClient(): Ably.Realtime {
@@ -29,7 +33,11 @@ function getAblyClient(): Ably.Realtime {
   return ablyClient
 }
 
-export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
+export function useAuction(
+  auctionId: string,
+  initialData?: Partial<Auction>,
+  options: UseAuctionOptions = {}
+) {
   const [state, setState] = useState<AuctionState>({
     ...initialData,
     isLoading:    !initialData,
@@ -46,6 +54,7 @@ export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
   })
 
   const channelRef = useRef<Ably.RealtimeChannel | null>(null)
+  const realtimeEnabled = options.realtimeEnabled ?? true
 
   // ── Fetch initial state ──
   useEffect(() => {
@@ -58,6 +67,8 @@ export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
 
   // ── Subscribe to real-time events ──
   useEffect(() => {
+    if (!realtimeEnabled) return
+
     const client  = getAblyClient()
     const channel = client.channels.get(`auction:${auctionId}`)
     channelRef.current = channel
@@ -111,15 +122,11 @@ export function useAuction(auctionId: string, initialData?: Partial<Auction>) {
       }
     })
 
-    // Track presence (watcher count)
-    channel.presence.enter({ auctionId })
-
     return () => {
-      channel.presence.leave()
       channel.unsubscribe()
       channelRef.current = null
     }
-  }, [auctionId])
+  }, [auctionId, realtimeEnabled])
 
   // ── Place bid ──
   const placeBid = useCallback(async (amount: number, maxBid?: number) => {

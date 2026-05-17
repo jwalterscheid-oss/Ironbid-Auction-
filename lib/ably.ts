@@ -36,6 +36,8 @@ export async function createCarrierAblyToken(carrierId: string) {
   const tokenParams = {
     clientId: carrierId,
     capability: {
+      // Carrier users can still view live auction channels.
+      'auction:*': ['subscribe'],
       'haul-jobs:available': ['subscribe'],
       [`carrier:${carrierId}:*`]: ['subscribe', 'publish'],
     } as Record<string, ("subscribe" | "publish")[]>,

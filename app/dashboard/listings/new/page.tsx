@@ -71,12 +71,76 @@ export default function NewListingPage() {
     setForm(f => ({ ...f, [key]: val }))
   }
 
+  function clean(value: string) {
+    return value.trim()
+  }
+
+  function parseOptionalNumber(value: string): number | '' {
+    return value === '' ? '' : Number(value)
+  }
+
+  function validateStep(stepToValidate: Step): string | null {
+    if (stepToValidate === 'details') {
+      const currentYear = new Date().getFullYear() + 1
+      if (!form.category) return 'Select a category before continuing.'
+      if (form.year === '' || form.year < 1990 || form.year > currentYear) return 'Enter a valid year before continuing.'
+      if (!clean(form.make)) return 'Enter the equipment make before continuing.'
+      if (!clean(form.model)) return 'Enter the equipment model before continuing.'
+      if (!clean(form.locationCity) || !clean(form.locationState)) return 'Enter both city and state before continuing.'
+      return null
+    }
+
+    if (stepToValidate === 'condition') {
+      if (!form.conditionGrade) return 'Select an overall condition grade before continuing.'
+      const hasAllInspectionRatings = INSPECTION_COMPONENTS.every(comp => !!form.inspectionData[comp.key])
+      if (!hasAllInspectionRatings) return 'Rate all inspection components before continuing.'
+      return null
+    }
+
+    if (stepToValidate === 'media') {
+      if (form.photos.length < 4) return 'Upload at least 4 photos before continuing.'
+      return null
+    }
+
+    if (stepToValidate === 'auction' || stepToValidate === 'review') {
+      if (form.startingBid === '' || Number(form.startingBid) < 500) return 'Set a starting bid of at least $500 before continuing.'
+      if (form.auctionType === 'buy_now') {
+        if (form.buyNowPrice === '' || Number(form.buyNowPrice) <= 0) return 'Enter a buy now price before continuing.'
+        if (Number(form.buyNowPrice) < Number(form.startingBid)) return 'Buy now price must be greater than or equal to starting bid.'
+      }
+      return null
+    }
+
+    return null
+  }
+
+  const canPublish = !validateStep('details') && !validateStep('condition') && !validateStep('media') && !validateStep('auction')
+
+  const equipmentTitle = [form.year === '' ? '' : String(form.year), clean(form.make), clean(form.model)]
+    .filter(Boolean)
+    .join(' ')
+
+  const equipmentMeta = [
+    form.category ? CATEGORY_LABELS[form.category] : '',
+    form.hours === '' ? '' : `${Number(form.hours).toLocaleString()} hrs`,
+    form.conditionGrade ? `Grade ${form.conditionGrade}` : '',
+  ].filter(Boolean).join(' · ')
+
+  const locationLabel = [clean(form.locationCity), clean(form.locationState)].filter(Boolean).join(', ')
+
   function nextStep() {
+    const stepError = validateStep(step)
+    if (stepError) {
+      setError(stepError)
+      return
+    }
+    setError(null)
     const next = STEPS[stepIdx + 1]
     if (next) setStep(next.id)
   }
 
   function prevStep() {
+    setError(null)
     const prev = STEPS[stepIdx - 1]
     if (prev) setStep(prev.id)
   }
@@ -84,27 +148,52 @@ export default function NewListingPage() {
   async function handleSubmit() {
     setLoad(true)
     setError(null)
+
+    async function readErrorBody(res: Response) {
+      try {
+        const data = await res.json()
+        if (typeof data?.error === 'string' && data.error) return data.error
+      } catch {
+        // ignore JSON parse errors and fall back to plain text
+      }
+
+      try {
+        const text = await res.text()
+        if (text) return text
+      } catch {
+        // ignore text read errors
+      }
+
+      return `Request failed (${res.status})`
+    }
+
     try {
       // 1. Create listing
-      const listingRes = await fetch('/api/listings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          category:      form.category,
-          make:          form.make,
-          model:         form.model,
-          year:          Number(form.year),
-          serialNumber:  form.serialNumber || undefined,
-          hours:         form.hours ? Number(form.hours) : undefined,
-          weightKg:      form.weightKg ? Number(form.weightKg) : undefined,
-          conditionGrade: form.conditionGrade || undefined,
-          description:   form.description,
-          locationCity:  form.locationCity,
-          locationState: form.locationState,
-          inspectionData: form.inspectionData,
-        }),
-      })
-      if (!listingRes.ok) throw new Error(await listingRes.text())
+      let listingRes: Response
+      try {
+        listingRes = await fetch('/api/listings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            category:      form.category,
+            make:          form.make,
+            model:         form.model,
+            year:          Number(form.year),
+            serialNumber:  form.serialNumber || undefined,
+            hours:         form.hours ? Number(form.hours) : undefined,
+            weightKg:      form.weightKg ? Number(form.weightKg) : undefined,
+            conditionGrade: form.conditionGrade || undefined,
+            description:   form.description,
+            locationCity:  form.locationCity,
+            locationState: form.locationState,
+            inspectionData: form.inspectionData,
+          }),
+        })
+      } catch {
+        throw new Error('Network error while creating listing. Please check your connection and try again.')
+      }
+
+      if (!listingRes.ok) throw new Error(await readErrorBody(listingRes))
       const listing = await listingRes.json()
 
       // 2. Upload photos (if any)
@@ -112,7 +201,16 @@ export default function NewListingPage() {
         const fd = new FormData()
         form.photos.forEach(f => fd.append('photos', f))
         fd.append('listingId', listing.id)
-        await fetch('/api/listings/upload-photos', { method: 'POST', body: fd })
+
+        // Photo upload should not block publishing if the endpoint is unavailable.
+        try {
+          const uploadRes = await fetch('/api/listings/upload-photos', { method: 'POST', body: fd })
+          if (!uploadRes.ok && uploadRes.status !== 501) {
+            console.warn('Photo upload failed during publish', await readErrorBody(uploadRes))
+          }
+        } catch {
+          console.warn('Photo upload failed during publish due to a network error')
+        }
       }
 
       // 3. Create auction
@@ -120,21 +218,27 @@ export default function NewListingPage() {
       const durationMs = { '1day': 86400000, '3day': 259200000, '7day': 604800000, '14day': 1209600000 }[form.auctionDuration]
       const endTime = new Date(now.getTime() + durationMs).toISOString()
 
-      const auctionRes = await fetch('/api/auctions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          listingId:    listing.id,
-          type:         form.auctionType,
-          startTime:    now.toISOString(),
-          endTime,
-          startingBid:  Number(form.startingBid),
-          reservePrice: form.reservePrice ? Number(form.reservePrice) : undefined,
-          buyNowPrice:  form.buyNowPrice  ? Number(form.buyNowPrice)  : undefined,
-          minIncrement: deriveIncrement(Number(form.startingBid)),
-        }),
-      })
-      if (!auctionRes.ok) throw new Error(await auctionRes.text())
+      let auctionRes: Response
+      try {
+        auctionRes = await fetch('/api/auctions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            listingId:    listing.id,
+            type:         form.auctionType,
+            startTime:    now.toISOString(),
+            endTime,
+            startingBid:  Number(form.startingBid),
+            reservePrice: form.reservePrice ? Number(form.reservePrice) : undefined,
+            buyNowPrice:  form.buyNowPrice  ? Number(form.buyNowPrice)  : undefined,
+            minIncrement: deriveIncrement(Number(form.startingBid)),
+          }),
+        })
+      } catch {
+        throw new Error('Network error while creating auction. Please try publishing again.')
+      }
+
+      if (!auctionRes.ok) throw new Error(await readErrorBody(auctionRes))
       const auction = await auctionRes.json()
 
       router.push(`/auctions/${auction.id}?created=1`)
@@ -194,7 +298,7 @@ export default function NewListingPage() {
               </div>
               <div className="form-field">
                 <label>Year *</label>
-                <input type="number" min={1990} max={2025} value={form.year} onChange={e => update('year', Number(e.target.value))} placeholder="e.g. 2019" required />
+                <input type="number" min={1990} max={new Date().getFullYear() + 1} value={form.year} onChange={e => update('year', parseOptionalNumber(e.target.value))} placeholder="e.g. 2019" required />
               </div>
               <div className="form-field">
                 <label>Make *</label>
@@ -210,21 +314,22 @@ export default function NewListingPage() {
               </div>
               <div className="form-field">
                 <label>Operating Hours</label>
-                <input type="number" min={0} value={form.hours} onChange={e => update('hours', Number(e.target.value))} placeholder="e.g. 4820" />
+                <input type="number" min={0} value={form.hours} onChange={e => update('hours', parseOptionalNumber(e.target.value))} placeholder="e.g. 4820" />
               </div>
               <div className="form-field">
                 <label>Weight (kg)</label>
-                <input type="number" min={0} value={form.weightKg} onChange={e => update('weightKg', Number(e.target.value))} placeholder="e.g. 20300" />
+                <input type="number" min={0} value={form.weightKg} onChange={e => update('weightKg', parseOptionalNumber(e.target.value))} placeholder="e.g. 20300" />
               </div>
               <div className="form-field">
-                <label>City</label>
+                <label>City *</label>
                 <input type="text" value={form.locationCity} onChange={e => update('locationCity', e.target.value)} placeholder="e.g. Dallas" />
               </div>
               <div className="form-field">
-                <label>State</label>
+                <label>State *</label>
                 <input type="text" maxLength={2} value={form.locationState} onChange={e => update('locationState', e.target.value.toUpperCase())} placeholder="TX" />
               </div>
             </div>
+            <div className="form-hint">City and state are required for buyer pickup planning and freight quoting.</div>
             <div className="form-field full">
               <label>Description</label>
               <textarea rows={5} value={form.description} onChange={e => update('description', e.target.value)} placeholder="Describe the equipment's condition, recent service, included attachments, and any known issues..." />
@@ -336,16 +441,16 @@ export default function NewListingPage() {
             <div className="form-grid-2">
               <div className="form-field">
                 <label>Starting Bid ($) *</label>
-                <input type="number" min={500} value={form.startingBid} onChange={e => update('startingBid', Number(e.target.value))} placeholder="e.g. 50000" required />
+                <input type="number" min={500} value={form.startingBid} onChange={e => update('startingBid', parseOptionalNumber(e.target.value))} placeholder="e.g. 50000" required />
               </div>
               <div className="form-field">
                 <label>Reserve Price ($) <span className="opt">(optional)</span></label>
-                <input type="number" min={0} value={form.reservePrice} onChange={e => update('reservePrice', Number(e.target.value))} placeholder="Hidden minimum you'll accept" />
+                <input type="number" min={0} value={form.reservePrice} onChange={e => update('reservePrice', parseOptionalNumber(e.target.value))} placeholder="Hidden minimum you'll accept" />
               </div>
               {form.auctionType === 'buy_now' && (
                 <div className="form-field">
                   <label>Buy Now Price ($) *</label>
-                  <input type="number" min={0} value={form.buyNowPrice} onChange={e => update('buyNowPrice', Number(e.target.value))} required />
+                  <input type="number" min={0} value={form.buyNowPrice} onChange={e => update('buyNowPrice', parseOptionalNumber(e.target.value))} required />
                 </div>
               )}
               {form.auctionType === 'timed' && (
@@ -377,25 +482,27 @@ export default function NewListingPage() {
             <div className="review-grid">
               <div className="review-section">
                 <div className="rs-label">Equipment</div>
-                <div className="rs-value">{form.year} {form.make} {form.model}</div>
-                <div className="rs-meta">{form.category} · {form.hours?.toLocaleString()} hrs · Grade {form.conditionGrade}</div>
+                <div className="rs-value">{equipmentTitle || 'Equipment details incomplete'}</div>
+                <div className="rs-meta">{equipmentMeta || 'Add category, hours, and condition grade in previous steps.'}</div>
               </div>
               <div className="review-section">
                 <div className="rs-label">Location</div>
-                <div className="rs-value">{form.locationCity}, {form.locationState}</div>
+                <div className="rs-value">{locationLabel || 'Location not set'}</div>
               </div>
               <div className="review-section">
                 <div className="rs-label">Auction</div>
                 <div className="rs-value">{form.auctionType === 'timed' ? `${form.auctionDuration} timed auction` : 'Buy Now'}</div>
-                <div className="rs-meta">Starting bid: ${Number(form.startingBid).toLocaleString()}</div>
+                <div className="rs-meta">
+                  {form.startingBid === ''
+                    ? 'Starting bid not set'
+                    : `Starting bid: $${Number(form.startingBid).toLocaleString()}`}
+                </div>
               </div>
               <div className="review-section">
                 <div className="rs-label">Photos</div>
                 <div className="rs-value">{form.photos.length} photo{form.photos.length !== 1 ? 's' : ''} uploaded</div>
               </div>
             </div>
-
-            {error && <div className="form-error">⚠ {error}</div>}
 
             <div className="review-agreement">
               By publishing this listing you agree to IRONBID&apos;s{' '}
@@ -404,6 +511,8 @@ export default function NewListingPage() {
             </div>
           </div>
         )}
+
+        {error && <div className="form-error">⚠ {error}</div>}
       </div>
 
       {/* Navigation buttons */}
@@ -414,7 +523,7 @@ export default function NewListingPage() {
         {!isLastStep ? (
           <button className="btn-primary" onClick={nextStep}>Continue →</button>
         ) : (
-          <button className="btn-primary" onClick={handleSubmit} disabled={loading}>
+          <button className="btn-primary" onClick={handleSubmit} disabled={loading || !canPublish}>
             {loading ? 'Publishing...' : 'Publish Auction →'}
           </button>
         )}
@@ -433,3 +542,14 @@ const INSPECTION_COMPONENTS = [
   { key: 'electrical',  label: 'Electrical' },
   { key: 'cooling',     label: 'Cooling System' },
 ]
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  excavator: 'Excavator',
+  bulldozer: 'Bulldozer',
+  crane: 'Crane',
+  loader: 'Loader',
+  truck: 'Haul Truck',
+  aerial: 'Aerial Work Platform',
+  compactor: 'Compactor',
+  skid_steer: 'Skid Steer',
+}
