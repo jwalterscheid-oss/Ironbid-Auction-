@@ -259,12 +259,14 @@ export async function closeAuction(auctionId: string) {
     return
   }
 
-  // Calculate fees
+  // Calculate fees — round to cents, not whole dollars, so non-12% premiums
+  // and odd hammer prices don't silently drop sub-dollar amounts.
+  const round2 = (n: number) => Math.round(n * 100) / 100
   const hammerPrice    = Number(winningBid.amount)
-  const buyersPremium  = Math.round(hammerPrice * (Number(auction.buyersPremiumPct) / 100))
-  const totalDue       = hammerPrice + buyersPremium
-  const platformFee    = Math.round(hammerPrice * 0.02) // 2% seller fee
-  const sellerProceeds = hammerPrice - platformFee
+  const buyersPremium  = round2(hammerPrice * (Number(auction.buyersPremiumPct) / 100))
+  const totalDue       = round2(hammerPrice + buyersPremium)
+  const platformFee    = round2(hammerPrice * 0.02) // 2% seller fee
+  const sellerProceeds = round2(hammerPrice - platformFee)
   const dueDate        = new Date(Date.now() + 48 * 3600 * 1000)
 
   // Close auction + create transaction in one DB call

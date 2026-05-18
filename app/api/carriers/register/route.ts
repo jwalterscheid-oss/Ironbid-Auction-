@@ -31,8 +31,9 @@ export async function POST(req: NextRequest) {
       carrierId,
       companyName: body.data.company_name,
       mcNumber: body.data.mc_number,
-      stripeOnboardingUrl: 'https://connect.stripe.com/mock/onboard',
-      fmcsaStatus: 'active',
+      // snake_case to match the production response shape the form reads.
+      stripe_onboarding_url: 'https://connect.stripe.com/mock/onboard',
+      fmcsa_status: 'active',
       mocked: true,
     })
   }

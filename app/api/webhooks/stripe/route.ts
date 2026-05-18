@@ -94,6 +94,13 @@ export async function POST(req: NextRequest) {
             .where(eq(schema.users.stripeConnectAccountId, account.id))
             .returning()
           if (seller) await retrySellerPayouts(seller.id)
+        } else {
+          // Payouts disabled (onboarding incomplete or account restricted) —
+          // clear the flag so settleSellerPayout won't transfer to it.
+          await db
+            .update(schema.users)
+            .set({ stripeConnectOnboarded: false, updatedAt: new Date() })
+            .where(eq(schema.users.stripeConnectAccountId, account.id))
         }
         break
       }
