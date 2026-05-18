@@ -6,7 +6,7 @@ import { db, getUserByClerkId } from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
 import { stripe, toCents } from '@/lib/stripe'
 import { publishToChannel } from '@/lib/ably'
-import { notifyHaulAwarded } from '@/lib/slack'
+import { notifyHaulAwarded, notifyError } from '@/lib/slack'
 import { eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
 import { getDevMockState, isMockMode, mockUserIdForRole } from '@/lib/dev-mock'
@@ -53,6 +53,7 @@ export async function PATCH(
 
   const user = await getUserByClerkId(clerkId)
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabledAt) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
 
   // Verify job ownership
   const job = await db.query.haulJobs.findFirst({
@@ -109,7 +110,18 @@ export async function PATCH(
     p_payment_intent_id:  pi.id,
   })
   if (awardError) {
-    await stripe.paymentIntents.cancel(pi.id).catch(() => {})
+    try {
+      await stripe.paymentIntents.cancel(pi.id)
+    } catch (cancelErr: unknown) {
+      // The job was not awarded but the payment hold could not be voided —
+      // surface it so the orphaned authorization is cancelled manually.
+      await notifyError({
+        context: 'Haul award rollback — PaymentIntent not voided',
+        error: cancelErr instanceof Error ? cancelErr.message : 'cancel failed',
+        severity: 'critical',
+        data: { jobId: params.id, paymentIntentId: pi.id },
+      }).catch(() => {})
+    }
     return NextResponse.json({ error: 'Failed to award job — payment voided' }, { status: 500 })
   }
 

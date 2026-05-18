@@ -40,6 +40,9 @@ export async function upsertUserFromClerk(data: {
   const normalizedEmail = data.email.trim().toLowerCase()
   const existing = await getUserByClerkId(data.clerkId)
   if (existing) {
+    // A routine Clerk user.updated sync — do NOT clear disabledAt here, or any
+    // profile edit would silently un-disable a soft-deleted account. Genuine
+    // re-registration arrives with a new clerkId and is handled below.
     const [updated] = await db
       .update(schema.users)
       .set({
@@ -48,7 +51,6 @@ export async function upsertUserFromClerk(data: {
         firstName: data.firstName,
         lastName: data.lastName,
         avatarUrl: data.avatarUrl,
-        disabledAt: null, // re-activate if the account was previously deleted
         updatedAt: new Date(),
       })
       .where(eq(schema.users.clerkId, data.clerkId))
@@ -75,7 +77,6 @@ export async function upsertUserFromClerk(data: {
           firstName: data.firstName,
           lastName: data.lastName,
           avatarUrl: data.avatarUrl,
-          disabledAt: null,
           updatedAt: new Date(),
         },
       })

@@ -69,22 +69,28 @@ export async function createAuctionCheckoutSession(params: {
 }
 
 // ── Seller payout (Stripe transfer to the seller's Connect account) ──
+// The idempotency key is keyed on the transaction, so a duplicate webhook
+// delivery or a webhook racing the onboarding-retry path cannot create a
+// second transfer — Stripe returns the original.
 export async function transferToSeller(params: {
   amountCents: number
   sellerStripeAccountId: string
   transactionId: string
   auctionId: string
 }) {
-  return stripe.transfers.create({
-    amount: params.amountCents,
-    currency: 'usd',
-    destination: params.sellerStripeAccountId,
-    metadata: {
-      type: 'seller_payout',
-      transaction_id: params.transactionId,
-      auction_id: params.auctionId,
+  return stripe.transfers.create(
+    {
+      amount: params.amountCents,
+      currency: 'usd',
+      destination: params.sellerStripeAccountId,
+      metadata: {
+        type: 'seller_payout',
+        transaction_id: params.transactionId,
+        auction_id: params.auctionId,
+      },
     },
-  })
+    { idempotencyKey: `seller-payout-${params.transactionId}` }
+  )
 }
 
 // ── Haul booking payment intent (Stripe Connect transfer) ──

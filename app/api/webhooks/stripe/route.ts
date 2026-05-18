@@ -72,17 +72,11 @@ export async function POST(req: NextRequest) {
         break
       }
 
-      // ── Haul booking payment authorized (manual-capture hold) ──
-      case 'payment_intent.succeeded': {
-        const pi = event.data.object as any
-        if (pi.metadata?.type === 'haul_booking') {
-          await supabaseAdmin
-            .from('haul_jobs')
-            .update({ status: 'awarded', stripe_payment_intent: pi.id })
-            .eq('id', pi.metadata.haul_job_id)
-        }
-        break
-      }
+      // Note: haul-booking PaymentIntents use manual capture, so
+      // payment_intent.succeeded fires at delivery-capture time, not at award.
+      // The award route sets haul_jobs.status via the award_haul_job RPC, and
+      // confirm-delivery sets it to 'delivered' — handling the event here would
+      // regress 'delivered' back to 'awarded', so it is intentionally omitted.
 
       // ── Stripe Connect: carrier or seller finished onboarding ──
       case 'account.updated': {

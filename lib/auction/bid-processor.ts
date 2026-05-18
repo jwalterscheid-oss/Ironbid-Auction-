@@ -39,12 +39,17 @@ export async function validateBid(params: {
   }
 
   const currentBid = Number(state.current_bid ?? 0)
+  const bidCount = Number(state.bid_count ?? 0)
   const minIncrement = getMinIncrement(currentBid)
 
-  if (amount < currentBid + minIncrement) {
+  // The opening bid may equal the starting bid; later bids must clear the
+  // increment. Mirrors the authoritative rule in the place_bid RPC.
+  const minRequired = bidCount > 0 ? currentBid + minIncrement : currentBid
+
+  if (amount < minRequired) {
     return {
       valid: false,
-      error: `bid_too_low — minimum bid is $${(currentBid + minIncrement).toLocaleString()}`,
+      error: `bid_too_low — minimum bid is $${minRequired.toLocaleString()}`,
     }
   }
 
@@ -223,7 +228,7 @@ export async function closeAuction(auctionId: string) {
   })
 
   if (!auction) throw new Error('Auction not found')
-  if (auction.status === 'closed') return // already closed
+  if (auction.status !== 'active') return // already closed or cancelled
 
   const winningBid = await db.query.bids.findFirst({
     where: and(
@@ -233,15 +238,24 @@ export async function closeAuction(auctionId: string) {
   })
 
   if (!winningBid || !auction.reserveMet) {
-    // No winning bid or reserve not met — cancel
-    await db.update(schema.auctions)
+    // No winning bid or reserve not met — cancel, but only if no other
+    // runner (BullMQ job vs. cron safety net) already settled it.
+    const cancelled = await db.update(schema.auctions)
       .set({ status: 'cancelled' })
-      .where(eq(schema.auctions.id, auctionId))
+      .where(and(
+        eq(schema.auctions.id, auctionId),
+        eq(schema.auctions.status, 'active'),
+      ))
+      .returning({ id: schema.auctions.id })
+
+    if (cancelled.length === 0) return // another runner handled it
 
     await publishToChannel(`auction:${auctionId}`, 'auction_closed', {
       finalPrice: null,
       reserveMet: false,
     })
+    await redis.del(AUCTION_KEY(auctionId))
+    await redis.del(AUTOBID_KEY(auctionId))
     return
   }
 
@@ -254,7 +268,7 @@ export async function closeAuction(auctionId: string) {
   const dueDate        = new Date(Date.now() + 48 * 3600 * 1000)
 
   // Close auction + create transaction in one DB call
-  await supabaseAdmin.rpc('close_auction', {
+  const { data: closeResult, error: closeError } = await supabaseAdmin.rpc('close_auction', {
     p_auction_id:      auctionId,
     p_winner_id:       winningBid.bidderId,
     p_final_price:     hammerPrice,
@@ -264,6 +278,11 @@ export async function closeAuction(auctionId: string) {
     p_seller_proceeds: sellerProceeds,
     p_due_date:        dueDate.toISOString(),
   })
+
+  if (closeError) throw new Error(closeError.message)
+
+  // Another runner already settled this auction — don't double-notify.
+  if (closeResult && (closeResult as { closed?: boolean }).closed === false) return
 
   // Notify winner via private channel
   await publishToChannel(`private:${winningBid.bidderId}`, 'you_won', {

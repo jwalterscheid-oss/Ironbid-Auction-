@@ -86,6 +86,9 @@ export async function POST(req: NextRequest) {
   if (!user) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
+  if (user.disabledAt) {
+    return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
+  }
   if (user.kycStatus !== 'verified') {
     return NextResponse.json(
       { error: 'identity_verification_required', message: 'Complete KYC before bidding' },
@@ -101,7 +104,10 @@ export async function POST(req: NextRequest) {
   }
 
   const currentBid  = Number(state.current_bid ?? 0)
-  const minRequired = currentBid + getMinIncrement(currentBid)
+  const bidCount    = Number(state.bid_count ?? 0)
+  // Opening bid may equal the starting bid; later bids must clear the
+  // increment. Authoritative rule lives in the place_bid RPC.
+  const minRequired = bidCount > 0 ? currentBid + getMinIncrement(currentBid) : currentBid
 
   if (amount < minRequired) {
     return NextResponse.json(

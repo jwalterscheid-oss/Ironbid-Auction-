@@ -22,8 +22,21 @@ CREATE UNIQUE INDEX IF NOT EXISTS bids_one_winner_idx
   ON bids (auction_id) WHERE is_winning = true;
 
 -- Gap-free, race-free lot numbers (replaces the COUNT(*)+1 scheme).
+-- Seed from the highest existing lot-number suffix so a deleted listing can
+-- never cause nextval() to reissue a suffix already in use.
 CREATE SEQUENCE IF NOT EXISTS listing_lot_seq START 1;
-SELECT setval('listing_lot_seq', GREATEST((SELECT COUNT(*) FROM listings), 1));
+SELECT setval(
+  'listing_lot_seq',
+  GREATEST(
+    COALESCE(
+      (SELECT MAX(split_part(lot_number, '-', 3)::int)
+         FROM listings
+        WHERE lot_number ~ '^IB-\d+-\d+$'),
+      0
+    ),
+    1
+  )
+);
 
 -- ─── place_bid ───────────────────────────────────────────────────────────────
 -- Serializable bid placement. Locks the auction row so concurrent bids queue
@@ -136,16 +149,24 @@ CREATE OR REPLACE FUNCTION close_auction(
 LANGUAGE plpgsql
 AS $$
 DECLARE
-  v_listing_id uuid;
-  v_seller_id  uuid;
-  v_tx_id      uuid;
+  v_auction   auctions%ROWTYPE;
+  v_seller_id uuid;
+  v_tx_id     uuid;
 BEGIN
-  SELECT a.listing_id, l.seller_id INTO v_listing_id, v_seller_id
-    FROM auctions a JOIN listings l ON l.id = a.listing_id
-    WHERE a.id = p_auction_id;
+  -- Lock the auction row so two closers (the delayed BullMQ job and the
+  -- close-auctions cron safety net) cannot both settle the same auction.
+  SELECT * INTO v_auction FROM auctions WHERE id = p_auction_id FOR UPDATE;
   IF NOT FOUND THEN
     RAISE EXCEPTION 'auction_not_found';
   END IF;
+
+  -- Already settled by another runner — return without re-broadcasting.
+  IF v_auction.status <> 'active' THEN
+    SELECT id INTO v_tx_id FROM transactions WHERE auction_id = p_auction_id;
+    RETURN json_build_object('closed', false, 'transaction_id', v_tx_id, 'auction_id', p_auction_id);
+  END IF;
+
+  SELECT seller_id INTO v_seller_id FROM listings WHERE id = v_auction.listing_id;
 
   UPDATE auctions SET
     status            = 'closed',
@@ -153,7 +174,7 @@ BEGIN
     winning_bidder_id = p_winner_id
   WHERE id = p_auction_id;
 
-  UPDATE listings SET status = 'sold' WHERE id = v_listing_id;
+  UPDATE listings SET status = 'sold' WHERE id = v_auction.listing_id;
 
   INSERT INTO transactions (
     auction_id, buyer_id, seller_id, hammer_price, buyers_premium,
@@ -165,7 +186,11 @@ BEGIN
   ON CONFLICT (auction_id) DO NOTHING
   RETURNING id INTO v_tx_id;
 
-  RETURN json_build_object('transaction_id', v_tx_id, 'auction_id', p_auction_id);
+  IF v_tx_id IS NULL THEN
+    SELECT id INTO v_tx_id FROM transactions WHERE auction_id = p_auction_id;
+  END IF;
+
+  RETURN json_build_object('closed', true, 'transaction_id', v_tx_id, 'auction_id', p_auction_id);
 END;
 $$;
 

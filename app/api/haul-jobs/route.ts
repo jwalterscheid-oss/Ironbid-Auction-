@@ -48,8 +48,9 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data: user } = await supabaseAdmin
-    .from('users').select('id').eq('clerk_id', userId).single()
+    .from('users').select('id, disabled_at').eq('clerk_id', userId).single()
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabled_at) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
 
   const { data, error } = await supabaseAdmin
     .from('haul_jobs')
@@ -105,8 +106,9 @@ export async function POST(req: Request) {
   if (!body.success) return NextResponse.json({ error: body.error.flatten() }, { status: 422 })
 
   const { data: user } = await supabaseAdmin
-    .from('users').select('id').eq('clerk_id', userId).single()
+    .from('users').select('id, disabled_at').eq('clerk_id', userId).single()
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabled_at) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
 
   // Verify buyer paid for this transaction
   const { data: tx } = await supabaseAdmin

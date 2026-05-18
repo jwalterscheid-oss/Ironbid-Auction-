@@ -36,6 +36,18 @@ const STATUS_RANK: Record<HaulJobStatus, number> = {
   open: 0, bidding: 1, awarded: 2, picked_up: 3, in_transit: 4, delivered: 5, cancelled: -1,
 }
 
+type TrackingEventInput = z.infer<typeof TrackingSchema>['eventType']
+
+// Which job statuses each event may be logged from. Prevents a carrier from
+// skipping the state machine — e.g. jumping awarded → in_transit (via a
+// gps_update) without ever logging the pickup.
+const VALID_FROM: Record<TrackingEventInput, HaulJobStatus[]> = {
+  bol_signed:       ['awarded', 'picked_up'],
+  picked_up:        ['awarded'],
+  gps_update:       ['picked_up', 'in_transit'],
+  near_destination: ['picked_up', 'in_transit'],
+}
+
 export async function POST(req: NextRequest) {
   if (isMockMode) {
     const body = TrackingSchema.safeParse(await req.json())
@@ -47,6 +59,13 @@ export async function POST(req: NextRequest) {
       (j) => j.id === body.data.haulJobId && j.awardedCarrierId === carrierId
     )
     if (!job) return NextResponse.json({ error: 'Job not found or not assigned to you' }, { status: 404 })
+
+    if (!VALID_FROM[body.data.eventType].includes(job.status as HaulJobStatus)) {
+      return NextResponse.json(
+        { error: 'invalid_status_transition', message: `Cannot log ${body.data.eventType} while job is ${job.status}` },
+        { status: 422 }
+      )
+    }
 
     const newStatus = STATUS_MAP[body.data.eventType]
     if (newStatus) job.status = newStatus as typeof job.status
@@ -72,6 +91,7 @@ export async function POST(req: NextRequest) {
 
   const user = await getUserByClerkId(clerkId)
   if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 })
+  if (user.disabledAt) return NextResponse.json({ error: 'Account disabled' }, { status: 403 })
 
   // Verify carrier owns this job
   const job = await db.query.haulJobs.findFirst({
@@ -81,6 +101,13 @@ export async function POST(req: NextRequest) {
     ),
   })
   if (!job) return NextResponse.json({ error: 'Job not found or not assigned to you' }, { status: 404 })
+
+  if (!VALID_FROM[body.data.eventType].includes(job.status)) {
+    return NextResponse.json(
+      { error: 'invalid_status_transition', message: `Cannot log ${body.data.eventType} while job is ${job.status}` },
+      { status: 422 }
+    )
+  }
 
   const newStatus = STATUS_MAP[body.data.eventType]
   const eta = body.data.milesRemaining
