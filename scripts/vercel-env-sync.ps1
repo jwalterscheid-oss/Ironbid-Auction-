@@ -49,8 +49,10 @@ function Is-RiskyValue {
     [string]$Target
   )
 
-  if ($Key -eq 'REDIS_URL' -and $Value -match '127\.0\.0\.1|localhost') { return $true }
-  if ($Target -ne 'development' -and $Key -eq 'DEV_AUTH_BYPASS' -and $Value -match '^(true|1)$') { return $true }
+  # Never push a localhost Redis URL to preview/production. Use -like for
+  # robustness — the previous -match regex failed silently under StrictMode.
+  if ($Target -ne 'development' -and $Key -eq 'REDIS_URL' -and ($Value -like '*127.0.0.1*' -or $Value -like '*localhost*')) { return $true }
+  if ($Target -ne 'development' -and $Key -eq 'DEV_AUTH_BYPASS' -and ($Value -eq 'true' -or $Value -eq '1')) { return $true }
 
   return $false
 }

@@ -12,6 +12,9 @@ const isPublicRoute = createRouteMatcher([
   '/auth/sign-up(.*)',
   '/api/webhooks(.*)',
   '/api/ably-token(.*)',
+  '/api/health(.*)',
+  // Vercel cron — protected by its own CRON_SECRET Bearer-header check, not Clerk.
+  '/api/cron(.*)',
 ])
 
 export default clerkMiddleware((auth, req) => {
