@@ -1,4 +1,7 @@
-export const isMockMode = process.env.DEV_MOCK_MODE === 'true'
+// Mock mode is hard-disabled in production regardless of env var, so a
+// stray DEV_MOCK_MODE=true on Vercel cannot bypass Clerk auth.
+export const isMockMode =
+  process.env.DEV_MOCK_MODE === 'true' && process.env.NODE_ENV !== 'production'
 
 export type MockRole = 'seller' | 'buyer' | 'carrier'
 

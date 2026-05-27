@@ -7,6 +7,12 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { eq, and } from 'drizzle-orm'
 import * as schema from '@/lib/schema'
 import type { PlaceBidResult } from '@/types'
+import {
+  buyersPremiumPctToBps,
+  centsToDollars,
+  computeAuctionSettlement,
+  numericToCents,
+} from '@/lib/fees'
 
 const MIN_INCREMENTS: [number, number][] = [
   [500_000,  5_000],
@@ -259,25 +265,24 @@ export async function closeAuction(auctionId: string) {
     return
   }
 
-  // Calculate fees — round to cents, not whole dollars, so non-12% premiums
-  // and odd hammer prices don't silently drop sub-dollar amounts.
-  const round2 = (n: number) => Math.round(n * 100) / 100
-  const hammerPrice    = Number(winningBid.amount)
-  const buyersPremium  = round2(hammerPrice * (Number(auction.buyersPremiumPct) / 100))
-  const totalDue       = round2(hammerPrice + buyersPremium)
-  const platformFee    = round2(hammerPrice * 0.02) // 2% seller fee
-  const sellerProceeds = round2(hammerPrice - platformFee)
-  const dueDate        = new Date(Date.now() + 48 * 3600 * 1000)
+  // All settlement math in integer cents — see lib/fees.ts. The RPC still
+  // accepts dollar amounts (numeric(14,2)) so we serialize at the boundary.
+  const hammerCents = numericToCents(winningBid.amount)
+  const settlement  = computeAuctionSettlement(
+    hammerCents,
+    buyersPremiumPctToBps(auction.buyersPremiumPct),
+  )
+  const dueDate = new Date(Date.now() + 48 * 3600 * 1000)
 
   // Close auction + create transaction in one DB call
   const { data: closeResult, error: closeError } = await supabaseAdmin.rpc('close_auction', {
     p_auction_id:      auctionId,
     p_winner_id:       winningBid.bidderId,
-    p_final_price:     hammerPrice,
-    p_buyers_premium:  buyersPremium,
-    p_total_due:       totalDue,
-    p_platform_fee:    platformFee,
-    p_seller_proceeds: sellerProceeds,
+    p_final_price:     centsToDollars(settlement.hammerCents),
+    p_buyers_premium:  centsToDollars(settlement.buyersPremiumCents),
+    p_total_due:       centsToDollars(settlement.totalDueCents),
+    p_platform_fee:    centsToDollars(settlement.platformFeeCents),
+    p_seller_proceeds: centsToDollars(settlement.sellerProceedsCents),
     p_due_date:        dueDate.toISOString(),
   })
 
@@ -289,15 +294,15 @@ export async function closeAuction(auctionId: string) {
   // Notify winner via private channel
   await publishToChannel(`private:${winningBid.bidderId}`, 'you_won', {
     auctionId,
-    finalPrice:      hammerPrice,
-    buyersPremium,
-    totalDue,
+    finalPrice:      centsToDollars(settlement.hammerCents),
+    buyersPremium:   centsToDollars(settlement.buyersPremiumCents),
+    totalDue:        centsToDollars(settlement.totalDueCents),
     paymentDeadline: dueDate.toISOString(),
   })
 
   // Broadcast close to all watchers
   await publishToChannel(`auction:${auctionId}`, 'auction_closed', {
-    finalPrice:    hammerPrice,
+    finalPrice:    centsToDollars(settlement.hammerCents),
     winnerMasked:  maskBidder(winningBid.bidderId),
     reserveMet:    true,
   })
@@ -306,7 +311,7 @@ export async function closeAuction(auctionId: string) {
   await notifyAuctionClosed({
     lotNumber:     auction.listing?.lotNumber ?? auctionId.slice(0, 8),
     equipmentName: auction.listing ? `${auction.listing.year} ${auction.listing.make} ${auction.listing.model}` : 'Unknown',
-    finalPrice:    hammerPrice,
+    finalPrice:    centsToDollars(settlement.hammerCents),
     winnerMasked:  maskBidder(winningBid.bidderId),
     totalBids:     auction.bidCount,
     reserveMet:    true,
@@ -324,6 +329,8 @@ function maskBidder(userId: string): string {
 }
 
 export function calcBuyersPremium(hammerPrice: number, pct = 12): number {
+  // Kept for legacy callers (dashboard summaries). New code paths should use
+  // computeAuctionSettlement from lib/fees.ts directly.
   return Math.round(hammerPrice * (pct / 100))
 }
 

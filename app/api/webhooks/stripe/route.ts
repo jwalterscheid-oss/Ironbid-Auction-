@@ -1,6 +1,6 @@
 // app/api/webhooks/stripe/route.ts
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from 'next/server'
+import type Stripe from 'stripe'
 import { eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import * as schema from '@/lib/schema'
@@ -11,6 +11,23 @@ import { notifyPaymentReceived, notifyHaulDelivered, notifyError } from '@/lib/s
 
 export const runtime = 'nodejs'
 
+type CheckoutMetadata = {
+  type?: string
+  transaction_id?: string
+  lot_number?: string
+  buyer_id?: string
+}
+
+type TransferMetadata = {
+  haul_job_id?: string
+  lot_number?: string
+  carrier_name?: string
+}
+
+type IdentityMetadata = {
+  user_id?: string
+}
+
 export async function POST(req: NextRequest) {
   const rawBody = await req.text()
   const sig = req.headers.get('stripe-signature')
@@ -19,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
   }
 
-  let event
+  let event: Stripe.Event
   try {
     event = constructWebhookEvent(rawBody, sig)
   } catch (err: unknown) {
@@ -27,15 +44,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
   }
 
+  // Idempotency: claim this event.id before doing any side-effectful work. Stripe
+  // retries on 5xx and may also redeliver events out of order; without this guard
+  // `transfer.created` would re-flip haul state, Slack would double-fire, etc.
+  const claimed = await db
+    .insert(schema.stripeWebhookEvents)
+    .values({ eventId: event.id, type: event.type })
+    .onConflictDoNothing({ target: schema.stripeWebhookEvents.eventId })
+    .returning({ eventId: schema.stripeWebhookEvents.eventId })
+
+  if (claimed.length === 0) {
+    return NextResponse.json({ received: true, duplicate: true })
+  }
+
   try {
     switch (event.type) {
 
       // ── Auction settlement paid (hosted Checkout completed) ──
       case 'checkout.session.completed': {
-        const session = event.data.object as any
-        if (session.metadata?.type === 'auction_win' && session.payment_status === 'paid') {
-          const transactionId = session.metadata.transaction_id as string
-
+        const session = event.data.object as Stripe.Checkout.Session
+        const meta = (session.metadata ?? {}) as CheckoutMetadata
+        if (meta.type === 'auction_win' && session.payment_status === 'paid' && meta.transaction_id) {
           const [tx] = await db
             .update(schema.transactions)
             .set({
@@ -46,7 +75,7 @@ export async function POST(req: NextRequest) {
               paymentMethod: 'stripe',
               paidAt: new Date(),
             })
-            .where(eq(schema.transactions.id, transactionId))
+            .where(eq(schema.transactions.id, meta.transaction_id))
             .returning()
 
           if (tx) {
@@ -62,8 +91,8 @@ export async function POST(req: NextRequest) {
             }
 
             await notifyPaymentReceived({
-              lotNumber: session.metadata.lot_number ?? tx.auctionId.slice(0, 8),
-              buyerName: session.customer_email ?? session.metadata.buyer_id ?? 'Buyer',
+              lotNumber: meta.lot_number ?? tx.auctionId.slice(0, 8),
+              buyerName: session.customer_email ?? meta.buyer_id ?? 'Buyer',
               amount: (session.amount_total ?? 0) / 100,
               method: 'Stripe Checkout',
             }).catch(() => {})
@@ -80,7 +109,7 @@ export async function POST(req: NextRequest) {
 
       // ── Stripe Connect: carrier or seller finished onboarding ──
       case 'account.updated': {
-        const account = event.data.object as any
+        const account = event.data.object as Stripe.Account
         if (account.details_submitted && account.charges_enabled) {
           await supabaseAdmin
             .from('carrier_profiles')
@@ -107,17 +136,18 @@ export async function POST(req: NextRequest) {
 
       // ── Transfer to carrier succeeded (delivery payout) ──
       case 'transfer.created': {
-        const transfer = event.data.object as any
-        if (transfer.metadata?.haul_job_id) {
+        const transfer = event.data.object as Stripe.Transfer
+        const meta = (transfer.metadata ?? {}) as TransferMetadata
+        if (meta.haul_job_id) {
           await supabaseAdmin
             .from('haul_jobs')
             .update({ status: 'delivered' })
-            .eq('id', transfer.metadata.haul_job_id)
+            .eq('id', meta.haul_job_id)
 
           await notifyHaulDelivered({
-            jobId: transfer.metadata.haul_job_id,
-            lotNumber: transfer.metadata.lot_number ?? '—',
-            carrierName: transfer.metadata.carrier_name ?? '—',
+            jobId: meta.haul_job_id,
+            lotNumber: meta.lot_number ?? '—',
+            carrierName: meta.carrier_name ?? '—',
             payoutAmount: transfer.amount / 100,
           }).catch(() => {})
         }
@@ -126,13 +156,13 @@ export async function POST(req: NextRequest) {
 
       // ── Identity verification passed → mark user KYC verified ──
       case 'identity.verification_session.verified': {
-        const session = event.data.object as any
-        const userId = session.metadata?.user_id
-        if (userId) {
+        const session = event.data.object as Stripe.Identity.VerificationSession
+        const meta = (session.metadata ?? {}) as IdentityMetadata
+        if (meta.user_id) {
           await supabaseAdmin
             .from('users')
             .update({ kyc_status: 'verified', updated_at: new Date().toISOString() })
-            .eq('id', userId)
+            .eq('id', meta.user_id)
         }
         break
       }
@@ -146,6 +176,12 @@ export async function POST(req: NextRequest) {
         break
     }
   } catch (err: unknown) {
+    // Release the dedupe row so Stripe's retry can reprocess this event.
+    await db
+      .delete(schema.stripeWebhookEvents)
+      .where(eq(schema.stripeWebhookEvents.eventId, event.id))
+      .catch(() => {})
+
     await notifyError({
       context: `Stripe webhook: ${event.type}`,
       error: err instanceof Error ? err.message : 'Handler error',

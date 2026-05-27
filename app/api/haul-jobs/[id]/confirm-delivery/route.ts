@@ -2,7 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@clerk/nextjs/server'
 import { db, getUserByClerkId } from '@/lib/db'
-import { stripe, toDollars } from '@/lib/stripe'
+import { stripe } from '@/lib/stripe'
+import { centsToDollars, computeHaulSettlement } from '@/lib/fees'
 import { publishToChannel } from '@/lib/ably'
 import { notifyHaulDelivered, notifyError } from '@/lib/slack'
 import { eq, and, sql, inArray } from 'drizzle-orm'
@@ -82,26 +83,27 @@ export async function POST(
   }
 
   // Payment is released and the job is 'delivered'. The remaining writes are
-  // best-effort — a failure here must not revert the delivery or re-capture.
+  // best-effort but grouped in one transaction so they're all-or-nothing —
+  // a partial failure can't leave the transaction marked closed without the
+  // carrier's reputation credit, or vice versa.
   try {
-    // Close the sale: the equipment is delivered.
-    await db.update(schema.transactions)
-      .set({ closedAt: new Date(), titleStatus: 'transferred' })
-      .where(eq(schema.transactions.id, job.transactionId))
+    await db.transaction(async (tx) => {
+      await tx.update(schema.transactions)
+        .set({ closedAt: new Date(), titleStatus: 'transferred' })
+        .where(eq(schema.transactions.id, job.transactionId))
 
-    // Credit the carrier's completed-haul count for their reputation.
-    if (job.awardedCarrierId) {
-      await db.update(schema.carrierProfiles)
-        .set({ completedHauls: sql`coalesce(${schema.carrierProfiles.completedHauls}, 0) + 1` })
-        .where(eq(schema.carrierProfiles.userId, job.awardedCarrierId))
-    }
+      if (job.awardedCarrierId) {
+        await tx.update(schema.carrierProfiles)
+          .set({ completedHauls: sql`coalesce(${schema.carrierProfiles.completedHauls}, 0) + 1` })
+          .where(eq(schema.carrierProfiles.userId, job.awardedCarrierId))
+      }
 
-    // Log tracking event
-    await db.insert(schema.haulTracking).values({
-      haulJobId:  params.id,
-      eventType:  'delivered',
-      notes:      'Confirmed by buyer',
-      recordedAt: new Date(),
+      await tx.insert(schema.haulTracking).values({
+        haulJobId:  params.id,
+        eventType:  'delivered',
+        notes:      'Confirmed by buyer',
+        recordedAt: new Date(),
+      })
     })
   } catch (err: unknown) {
     await notifyError({
@@ -112,7 +114,7 @@ export async function POST(
     }).catch(() => {})
   }
 
-  const payoutAmount = toDollars(pi.amount) * 0.92 // after 8% platform fee
+  const payoutAmount = centsToDollars(computeHaulSettlement(pi.amount).carrierNetCents)
   const carrierProfile = job.awardedCarrier?.carrierProfile
 
   // Notify carrier

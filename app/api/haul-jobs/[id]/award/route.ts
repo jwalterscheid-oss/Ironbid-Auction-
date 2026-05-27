@@ -4,7 +4,8 @@ import { auth } from '@clerk/nextjs/server'
 import { z } from 'zod'
 import { db, getUserByClerkId } from '@/lib/db'
 import { supabaseAdmin } from '@/lib/supabase'
-import { stripe, toCents } from '@/lib/stripe'
+import { stripe } from '@/lib/stripe'
+import { computeHaulSettlement, numericToCents } from '@/lib/fees'
 import { publishToChannel } from '@/lib/ably'
 import { notifyHaulAwarded, notifyError } from '@/lib/slack'
 import { eq, and } from 'drizzle-orm'
@@ -85,24 +86,34 @@ export async function PATCH(
     return NextResponse.json({ error: 'Carrier payment account not set up' }, { status: 422 })
   }
 
-  // Create Stripe payment intent (holds funds in escrow)
-  const pi = await stripe.paymentIntents.create({
-    amount:                 toCents(Number(bid.amount)),
-    currency:               'usd',
-    application_fee_amount: toCents(Number(bid.amount) * 0.08),
-    transfer_data:          { destination: carrierProfile.stripeAccountId },
-    capture_method:         'manual', // hold, capture on delivery
-    metadata: {
-      type:        'haul_booking',
-      haul_job_id: params.id,
-      haul_bid_id: bid.id,
-      buyer_id:    user.id,
-      carrier_id:  bid.carrierId,
+  // Create Stripe payment intent (holds funds in escrow). The idempotency key
+  // makes two concurrent buyer clicks return the SAME PaymentIntent instead of
+  // both placing real card holds. Per (jobId, bidId) so a different bid pick
+  // gets its own PI.
+  const idempotencyKey = `haul-award-${params.id}-${bid.id}`
+  const haulFees = computeHaulSettlement(numericToCents(bid.amount))
+  const pi = await stripe.paymentIntents.create(
+    {
+      amount:                 haulFees.bidCents,
+      currency:               'usd',
+      application_fee_amount: haulFees.applicationFeeCents,
+      transfer_data:          { destination: carrierProfile.stripeAccountId },
+      capture_method:         'manual', // hold, capture on delivery
+      metadata: {
+        type:        'haul_booking',
+        haul_job_id: params.id,
+        haul_bid_id: bid.id,
+        buyer_id:    user.id,
+        carrier_id:  bid.carrierId,
+      },
     },
-  })
+    { idempotencyKey },
+  )
 
-  // Update DB atomically. If this fails, void the payment authorization so we
-  // never leave funds held on the buyer with no awarded job.
+  // Atomic state transition. Concurrent callers will race to award_haul_job;
+  // the loser hits 'haul_job_not_awardable' and must decide whether the job
+  // was already awarded to THIS bid (idempotent replay → success) or to a
+  // different bid (real conflict → cancel our PI).
   const { error: awardError } = await supabaseAdmin.rpc('award_haul_job', {
     p_job_id:             params.id,
     p_bid_id:             bid.id,
@@ -110,19 +121,31 @@ export async function PATCH(
     p_payment_intent_id:  pi.id,
   })
   if (awardError) {
-    try {
-      await stripe.paymentIntents.cancel(pi.id)
-    } catch (cancelErr: unknown) {
-      // The job was not awarded but the payment hold could not be voided —
-      // surface it so the orphaned authorization is cancelled manually.
-      await notifyError({
-        context: 'Haul award rollback — PaymentIntent not voided',
-        error: cancelErr instanceof Error ? cancelErr.message : 'cancel failed',
-        severity: 'critical',
-        data: { jobId: params.id, paymentIntentId: pi.id },
-      }).catch(() => {})
+    const current = await db.query.haulJobs.findFirst({
+      where: eq(schema.haulJobs.id, params.id),
+      columns: { awardedBidId: true, stripePaymentIntent: true, status: true },
+    })
+    const sameAward =
+      current?.status === 'awarded' &&
+      current.awardedBidId === bid.id &&
+      current.stripePaymentIntent === pi.id
+
+    if (sameAward) {
+      // Concurrent retry — the other request awarded this exact bid with this
+      // exact PI. Treat as success.
+    } else {
+      try {
+        await stripe.paymentIntents.cancel(pi.id)
+      } catch (cancelErr: unknown) {
+        await notifyError({
+          context: 'Haul award rollback — PaymentIntent not voided',
+          error: cancelErr instanceof Error ? cancelErr.message : 'cancel failed',
+          severity: 'critical',
+          data: { jobId: params.id, paymentIntentId: pi.id },
+        }).catch(() => {})
+      }
+      return NextResponse.json({ error: 'Failed to award job — payment voided' }, { status: 409 })
     }
-    return NextResponse.json({ error: 'Failed to award job — payment voided' }, { status: 500 })
   }
 
   // Notify carrier via Ably

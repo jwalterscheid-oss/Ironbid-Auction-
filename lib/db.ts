@@ -4,6 +4,7 @@ import { Pool } from 'pg'
 import { eq, and, gt, lt, desc, asc, sql, inArray } from 'drizzle-orm'
 import * as schema from './schema'
 import type { AuctionFilters } from '@/types'
+import { centsToDollars, computeHaulSettlement, numericToCents } from './fees'
 
 // ─── CLIENT ──────────────────────────────────────────────────────────────────
 
@@ -323,7 +324,19 @@ export async function getAvailableHaulJobs(carrierProfile: {
   trailerTypes: string[]
   serviceStates: string[]
 }) {
-  void carrierProfile
+  // Trailer match: the job's trailerType must be 'any' or one the carrier
+  // hauls. Empty carrier list ⇒ no trailer restriction.
+  const trailerFilter = carrierProfile.trailerTypes.length > 0
+    ? sql`(${schema.haulJobs.trailerType} = 'any' OR ${schema.haulJobs.trailerType} = ANY(${carrierProfile.trailerTypes}))`
+    : sql`true`
+
+  // Service-state match: at least one endpoint must be in the carrier's
+  // service area. Empty service-state list ⇒ nationwide carrier, no filter.
+  const stateFilter = carrierProfile.serviceStates.length > 0
+    ? sql`(${schema.haulJobs.pickupState} = ANY(${carrierProfile.serviceStates})
+        OR ${schema.haulJobs.deliveryState} = ANY(${carrierProfile.serviceStates}))`
+    : sql`true`
+
   return db
     .select({ job: schema.haulJobs, listing: schema.listings })
     .from(schema.haulJobs)
@@ -331,6 +344,8 @@ export async function getAvailableHaulJobs(carrierProfile: {
     .where(and(
       eq(schema.haulJobs.status, 'bidding'),
       gt(schema.haulJobs.bidCloseTime, new Date()),
+      trailerFilter,
+      stateFilter,
     ))
     .orderBy(asc(schema.haulJobs.bidCloseTime))
 }
@@ -387,11 +402,22 @@ export async function getCarrierEarnings(carrierId: string) {
     ))
     .orderBy(desc(schema.haulJobs.createdAt))
 
-  const totalGross  = completed.reduce((s, r) => s + Number(r.bid.amount), 0)
-  const platformFee = totalGross * 0.08
-  const totalNet    = totalGross - platformFee
+  // Compute in cents to match how the platform actually charged each haul.
+  let totalGrossCents = 0
+  let platformFeeCents = 0
+  for (const r of completed) {
+    const settlement = computeHaulSettlement(numericToCents(r.bid.amount))
+    totalGrossCents  += settlement.bidCents
+    platformFeeCents += settlement.applicationFeeCents
+  }
+  const totalNetCents = totalGrossCents - platformFeeCents
 
-  return { completed, totalGross, platformFee, totalNet }
+  return {
+    completed,
+    totalGross:  centsToDollars(totalGrossCents),
+    platformFee: centsToDollars(platformFeeCents),
+    totalNet:    centsToDollars(totalNetCents),
+  }
 }
 
 // ─── WATCHLIST ────────────────────────────────────────────────────────────────

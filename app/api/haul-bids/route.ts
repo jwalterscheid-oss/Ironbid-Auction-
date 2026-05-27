@@ -99,11 +99,53 @@ export async function POST(req: NextRequest) {
       eq(schema.haulBids.status, 'active'),
     ),
   })
+  // Map DB-level guard failures (window closed, job not bidding, dup bid) to
+  // a 409 the client can render, instead of a generic 500.
+  const mapWriteError = (err: unknown): NextResponse | null => {
+    const msg = err instanceof Error ? err.message : String(err)
+    if (msg.includes('haul_bid_window_closed')) {
+      return NextResponse.json({ error: 'Bid window closed' }, { status: 409 })
+    }
+    if (msg.includes('haul_job_not_bidding')) {
+      return NextResponse.json({ error: 'Job is no longer accepting bids' }, { status: 409 })
+    }
+    if (msg.includes('haul_bids_one_active_per_carrier_idx')) {
+      return NextResponse.json({ error: 'You already have an active bid on this job' }, { status: 409 })
+    }
+    return null
+  }
+
   if (existing) {
-    // Update existing bid amount
-    const [updated] = await db
-      .update(schema.haulBids)
-      .set({
+    let updated
+    try {
+      ;[updated] = await db
+        .update(schema.haulBids)
+        .set({
+          amount: body.data.amount.toString(),
+          includesPermits: body.data.includesPermits,
+          includesPilotCar: body.data.includesPilotCar,
+          trailerType: body.data.trailerType,
+          estimatedPickupDate: body.data.estimatedPickupDate,
+          estimatedDeliveryDate: body.data.estimatedDeliveryDate,
+          carrierNotes: body.data.carrierNotes,
+        })
+        .where(eq(schema.haulBids.id, existing.id))
+        .returning()
+    } catch (err: unknown) {
+      const mapped = mapWriteError(err)
+      if (mapped) return mapped
+      throw err
+    }
+    return NextResponse.json(updated)
+  }
+
+  let bid
+  try {
+    ;[bid] = await db
+      .insert(schema.haulBids)
+      .values({
+        haulJobId: body.data.haulJobId,
+        carrierId: user.id,
         amount: body.data.amount.toString(),
         includesPermits: body.data.includesPermits,
         includesPilotCar: body.data.includesPilotCar,
@@ -111,28 +153,15 @@ export async function POST(req: NextRequest) {
         estimatedPickupDate: body.data.estimatedPickupDate,
         estimatedDeliveryDate: body.data.estimatedDeliveryDate,
         carrierNotes: body.data.carrierNotes,
+        status: 'active',
+        placedAt: new Date(),
       })
-      .where(eq(schema.haulBids.id, existing.id))
       .returning()
-    return NextResponse.json(updated)
+  } catch (err: unknown) {
+    const mapped = mapWriteError(err)
+    if (mapped) return mapped
+    throw err
   }
-
-  const [bid] = await db
-    .insert(schema.haulBids)
-    .values({
-      haulJobId: body.data.haulJobId,
-      carrierId: user.id,
-      amount: body.data.amount.toString(),
-      includesPermits: body.data.includesPermits,
-      includesPilotCar: body.data.includesPilotCar,
-      trailerType: body.data.trailerType,
-      estimatedPickupDate: body.data.estimatedPickupDate,
-      estimatedDeliveryDate: body.data.estimatedDeliveryDate,
-      carrierNotes: body.data.carrierNotes,
-      status: 'active',
-      placedAt: new Date(),
-    })
-    .returning()
 
   // Notify buyer in real-time
   await publishToChannel(`haul:${body.data.haulJobId}`, 'haul_bid_received', {

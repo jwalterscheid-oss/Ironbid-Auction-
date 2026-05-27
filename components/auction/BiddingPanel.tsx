@@ -43,6 +43,7 @@ export function BiddingPanel({
   const [autobidMax, setAutobidMax]         = useState('')
   const [autobidOn, setAutobidOn]           = useState(false)
   const [justBid, setJustBid]               = useState(false)
+  const [verificationError, setVerificationError] = useState<string | null>(null)
 
   const bidAmount = customInput ? Number(customInput) : selectedAmount
   const premium   = Math.round(bidAmount * (buyersPremiumPct / 100))
@@ -50,9 +51,10 @@ export function BiddingPanel({
 
   async function handleBid() {
     if (!isVerified) {
-      alert('Please complete identity verification before bidding.')
+      setVerificationError('Please complete identity verification before bidding.')
       return
     }
+    setVerificationError(null)
     const result = await placeBid(bidAmount, autobidOn && autobidMax ? Number(autobidMax) : undefined)
     if (result.success) {
       setJustBid(true)
@@ -131,8 +133,8 @@ export function BiddingPanel({
             {buttonText}
           </button>
 
-          {bidState.lastError && (
-            <div className="bid-error">⚠ {bidState.lastError}</div>
+          {(verificationError || bidState.lastError) && (
+            <div className="bid-error">⚠ {verificationError ?? bidState.lastError}</div>
           )}
 
           {/* Autobid toggle */}

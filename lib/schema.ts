@@ -134,6 +134,7 @@ export const bids = pgTable('bids', {
   auctionIdx: index('bids_auction_idx').on(t.auctionId),
   bidderIdx:  index('bids_bidder_idx').on(t.bidderId),
   winningIdx: index('bids_winning_idx').on(t.isWinning),
+  placedAtIdx: index('bids_placed_at_idx').on(t.placedAt),
   // At most one winning bid per auction — enforced at the DB level.
   oneWinnerIdx: uniqueIndex('bids_one_winner_idx')
     .on(t.auctionId)
@@ -167,6 +168,8 @@ export const transactions = pgTable('transactions', {
   createdAt:           timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => ({
   paymentStatusIdx: index('tx_payment_status_idx').on(t.paymentStatus),
+  buyerIdx:  index('tx_buyer_idx').on(t.buyerId),
+  sellerIdx: index('tx_seller_idx').on(t.sellerId),
 }))
 
 // ─── CARRIER PROFILES ────────────────────────────────────
@@ -283,6 +286,14 @@ export const carrierReviews = pgTable('carrier_reviews', {
   createdAt:    timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })
 
+// Records every Stripe webhook event we've processed so retries are no-ops.
+// Insert is gated by primary-key conflict — see app/api/webhooks/stripe/route.ts.
+export const stripeWebhookEvents = pgTable('stripe_webhook_events', {
+  eventId:     varchar('event_id', { length: 100 }).primaryKey(),
+  type:        varchar('type', { length: 100 }).notNull(),
+  processedAt: timestamp('processed_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 export const notifications = pgTable('notifications', {
   id:        uuid('id').defaultRandom().primaryKey(),
   userId:    uuid('user_id').notNull().references(() => users.id),
@@ -292,7 +303,10 @@ export const notifications = pgTable('notifications', {
   payload:   jsonb('payload'),
   sentAt:    timestamp('sent_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-})
+}, (t) => ({
+  userIdx:   index('notifications_user_idx').on(t.userId),
+  statusIdx: index('notifications_status_idx').on(t.status),
+}))
 
 export const usersRelations = relations(users, ({ many, one }) => ({
   listings: many(listings),

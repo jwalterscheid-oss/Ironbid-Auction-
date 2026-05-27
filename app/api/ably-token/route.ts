@@ -7,7 +7,8 @@ import { mockUserIdForRole } from '@/lib/dev-mock'
 
 export async function GET() {
   const { userId: clerkUserId } = auth()
-  const devAuthBypass = process.env.DEV_AUTH_BYPASS === 'true'
+  const devAuthBypass =
+    process.env.DEV_AUTH_BYPASS === 'true' && process.env.NODE_ENV !== 'production'
   const clerkId = clerkUserId ?? (devAuthBypass ? 'dev-bypass-user' : null)
 
   if (!clerkId) {

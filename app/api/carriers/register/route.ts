@@ -115,8 +115,14 @@ export async function POST(req: NextRequest) {
       .update({ stripe_account_id: stripeAccount.id })
       .eq('user_id', user.id)
 
-    const origin = req.headers.get('origin') ?? process.env.NEXT_PUBLIC_APP_URL!
-    const link = await createCarrierOnboardingLink(stripeAccount.id, origin)
+    // Origin is attacker-controllable; trust only our canonical app URL for
+    // the Stripe Connect return URL so a forged Origin header can't redirect
+    // a carrier through a phishing host.
+    const canonicalOrigin = process.env.NEXT_PUBLIC_APP_URL
+    if (!canonicalOrigin) {
+      throw new Error('NEXT_PUBLIC_APP_URL must be set to build the Stripe Connect return URL')
+    }
+    const link = await createCarrierOnboardingLink(stripeAccount.id, canonicalOrigin)
     stripeOnboardingUrl = link.url
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Stripe Connect carrier setup failed'

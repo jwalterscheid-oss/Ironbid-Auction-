@@ -157,31 +157,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Listing already has an auction' }, { status: 409 })
   }
 
-  const [auction] = await db
-    .insert(schema.auctions)
-    .values({
-      listingId: body.data.listingId,
-      type: body.data.type,
-      status: 'active',
-      startTime: new Date(body.data.startTime),
-      endTime: new Date(body.data.endTime),
-      startingBid: body.data.startingBid.toString(),
-      reservePrice: body.data.reservePrice ? body.data.reservePrice.toString() : undefined,
-      buyNowPrice: body.data.buyNowPrice ? body.data.buyNowPrice.toString() : undefined,
-      minIncrement: body.data.minIncrement.toString(),
-      buyersPremiumPct: body.data.buyersPremiumPct.toString(),
-      currentBid: body.data.startingBid.toString(),
-      bidCount: 0,
-      reserveMet: !body.data.reservePrice,
-      watchCount: 0,
-      viewCount: 0,
-    })
-    .returning()
+  // Insert auction + flip listing status in one transaction so a crash
+  // between the two writes can't leave an active auction on a draft listing.
+  const auction = await db.transaction(async (tx) => {
+    const [created] = await tx
+      .insert(schema.auctions)
+      .values({
+        listingId: body.data.listingId,
+        type: body.data.type,
+        status: 'active',
+        startTime: new Date(body.data.startTime),
+        endTime: new Date(body.data.endTime),
+        startingBid: body.data.startingBid.toString(),
+        reservePrice: body.data.reservePrice ? body.data.reservePrice.toString() : undefined,
+        buyNowPrice: body.data.buyNowPrice ? body.data.buyNowPrice.toString() : undefined,
+        minIncrement: body.data.minIncrement.toString(),
+        buyersPremiumPct: body.data.buyersPremiumPct.toString(),
+        currentBid: body.data.startingBid.toString(),
+        bidCount: 0,
+        reserveMet: !body.data.reservePrice,
+        watchCount: 0,
+        viewCount: 0,
+      })
+      .returning()
 
-  await db
-    .update(schema.listings)
-    .set({ status: 'active' })
-    .where(eq(schema.listings.id, body.data.listingId))
+    await tx
+      .update(schema.listings)
+      .set({ status: 'active' })
+      .where(eq(schema.listings.id, body.data.listingId))
+
+    return created
+  })
 
   // Seed Redis auction state for the live bidding pre-checks.
   try {
