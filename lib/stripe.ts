@@ -170,7 +170,10 @@ export async function createSellerConnectAccount(params: {
     email: params.email,
     metadata: { seller_id: params.sellerId },
     business_profile: params.companyName ? { name: params.companyName } : undefined,
-    capabilities: { transfers: { requested: true } },
+    capabilities: {
+      card_payments: { requested: true },
+      transfers:     { requested: true },
+    },
   })
 }
 
