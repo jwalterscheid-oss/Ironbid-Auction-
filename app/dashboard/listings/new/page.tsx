@@ -55,6 +55,71 @@ const STEPS: { id: Step; label: string }[] = [
   { id: 'review',   label: 'Review & Publish' },
 ]
 
+type SignedUpload = { name: string; path: string; token: string; signedUrl: string }
+
+async function uploadPhotos(listingId: string, photos: File[]) {
+  // ── 1. Ask the server for signed upload URLs ──
+  const signRes = await fetch('/api/listings/upload-photos/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      listingId,
+      files: photos.map(f => ({ name: f.name, type: f.type, size: f.size })),
+    }),
+  })
+  if (!signRes.ok) {
+    let msg = `Sign request failed (${signRes.status})`
+    try { const j = await signRes.json(); if (j?.error) msg = j.error } catch {}
+    throw new Error(msg)
+  }
+  const signJson = await signRes.json() as { mock?: boolean; uploads?: SignedUpload[] }
+
+  // ── Mock mode fallback: post raw bodies through the legacy endpoint ──
+  if (signJson.mock) {
+    const fd = new FormData()
+    photos.forEach(f => fd.append('photos', f))
+    fd.append('listingId', listingId)
+    const res = await fetch('/api/listings/upload-photos', { method: 'POST', body: fd })
+    if (!res.ok && res.status !== 501) {
+      let msg = `Upload failed (${res.status})`
+      try { const j = await res.json(); if (j?.error) msg = j.error } catch {}
+      throw new Error(msg)
+    }
+    return
+  }
+
+  const uploads = signJson.uploads ?? []
+  if (uploads.length !== photos.length) {
+    throw new Error('Sign response did not match photo count')
+  }
+
+  // ── 2. PUT each file directly to Supabase Storage in parallel ──
+  await Promise.all(uploads.map(async (u, i) => {
+    const file = photos[i]
+    const res = await fetch(u.signedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': file.type, 'x-upsert': 'true' },
+      body: file,
+    })
+    if (!res.ok) throw new Error(`Failed to upload "${file.name}" (${res.status})`)
+  }))
+
+  // ── 3. Tell the server to verify the bytes and persist the URLs ──
+  const finalizeRes = await fetch('/api/listings/upload-photos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      listingId,
+      photos: uploads.map(u => ({ path: u.path, caption: u.name })),
+    }),
+  })
+  if (!finalizeRes.ok) {
+    let msg = `Finalize failed (${finalizeRes.status})`
+    try { const j = await finalizeRes.json(); if (j?.error) msg = j.error } catch {}
+    throw new Error(msg)
+  }
+}
+
 export default function NewListingPage() {
   const router         = useRouter()
   useUser()
@@ -196,20 +261,16 @@ export default function NewListingPage() {
       if (!listingRes.ok) throw new Error(await readErrorBody(listingRes))
       const listing = await listingRes.json()
 
-      // 2. Upload photos (if any)
+      // 2. Upload photos (if any). Try direct-to-Supabase first so files larger
+      // than the Vercel serverless body limit can get through. The sign endpoint
+      // returns `{ mock: true }` in dev mock mode, in which case we fall back to
+      // posting the file bodies through the legacy multipart endpoint.
       if (form.photos.length > 0) {
-        const fd = new FormData()
-        form.photos.forEach(f => fd.append('photos', f))
-        fd.append('listingId', listing.id)
-
-        // Photo upload should not block publishing if the endpoint is unavailable.
         try {
-          const uploadRes = await fetch('/api/listings/upload-photos', { method: 'POST', body: fd })
-          if (!uploadRes.ok && uploadRes.status !== 501) {
-            console.warn('Photo upload failed during publish', await readErrorBody(uploadRes))
-          }
-        } catch {
-          console.warn('Photo upload failed during publish due to a network error')
+          await uploadPhotos(listing.id, form.photos)
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          console.warn('Photo upload failed during publish:', msg)
         }
       }
 
@@ -392,7 +453,7 @@ export default function NewListingPage() {
             }} onDragOver={e => e.preventDefault()}>
               <div className="uz-icon">📷</div>
               <div className="uz-title">Drag photos here or click to browse</div>
-              <div className="uz-sub">Minimum 4 photos required. JPEG or PNG, max 10MB each.</div>
+              <div className="uz-sub">Minimum 4 photos required. JPEG or PNG, max 50MB each.</div>
               <input type="file" multiple accept="image/*" className="uz-input" onChange={e => {
                 const files = Array.from(e.target.files ?? [])
                 update('photos', [...form.photos, ...files])
