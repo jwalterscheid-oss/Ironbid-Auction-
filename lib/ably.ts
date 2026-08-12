@@ -6,7 +6,10 @@ let ablyServer: Ably.Rest | null = null
 function getAblyServer() {
   if (ablyServer) return ablyServer
 
-  const apiKey = process.env.ABLY_API_KEY
+  // Sanitize the env value: surrounding quotes or stray whitespace (easy to
+  // pick up when pasting into the Vercel dashboard) make Ably reject the key
+  // with "invalid key parameter".
+  const apiKey = process.env.ABLY_API_KEY?.trim().replace(/^["']|["']$/g, '')
   if (!apiKey || !apiKey.includes(':')) {
     throw new Error('ABLY_API_KEY is missing or invalid')
   }

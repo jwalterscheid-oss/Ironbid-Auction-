@@ -1,7 +1,7 @@
 // app/dashboard/listings/new/page.tsx — Create listing (Client Component wizard)
 'use client'
 import Image from 'next/image'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useUser } from '@clerk/nextjs'
 
@@ -127,6 +127,9 @@ export default function NewListingPage() {
   const [form, setForm] = useState<FormState>(INITIAL)
   const [loading, setLoad] = useState(false)
   const [error, setError]  = useState<string | null>(null)
+  // Survives a failed publish attempt so retrying doesn't create a duplicate
+  // listing (the listing row is created before photos upload).
+  const createdListingIdRef = useRef<string | null>(null)
 
   const stepIdx     = STEPS.findIndex(s => s.id === step)
   const isLastStep  = stepIdx === STEPS.length - 1
@@ -233,7 +236,9 @@ export default function NewListingPage() {
     }
 
     try {
-      // 1. Create listing
+      // 1. Create listing (skipped if a previous attempt already created it)
+      let listingId = createdListingIdRef.current
+      if (!listingId) {
       let listingRes: Response
       try {
         listingRes = await fetch('/api/listings', {
@@ -260,17 +265,28 @@ export default function NewListingPage() {
 
       if (!listingRes.ok) throw new Error(await readErrorBody(listingRes))
       const listing = await listingRes.json()
+      listingId = listing.id as string
+      createdListingIdRef.current = listingId
+      }
 
-      // 2. Upload photos (if any). Try direct-to-Supabase first so files larger
+      // 2. Upload photos. Try direct-to-Supabase first so files larger
       // than the Vercel serverless body limit can get through. The sign endpoint
       // returns `{ mock: true }` in dev mock mode, in which case we fall back to
       // posting the file bodies through the legacy multipart endpoint.
+      //
+      // A failure here ABORTS the publish — an auction without photos is worse
+      // than a delayed one. The listing id is kept so pressing Publish again
+      // retries the photos without duplicating the listing.
       if (form.photos.length > 0) {
         try {
-          await uploadPhotos(listing.id, form.photos)
+          await uploadPhotos(listingId, form.photos)
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err)
-          console.warn('Photo upload failed during publish:', msg)
+          throw new Error(
+            `Your photos could not be uploaded (${msg}). ` +
+            'Nothing was published — please try pressing Publish again. ' +
+            'If it keeps failing, contact support.',
+          )
         }
       }
 
@@ -285,7 +301,7 @@ export default function NewListingPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            listingId:    listing.id,
+            listingId,
             type:         form.auctionType,
             startTime:    now.toISOString(),
             endTime,

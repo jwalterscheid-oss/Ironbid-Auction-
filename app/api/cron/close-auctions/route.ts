@@ -32,17 +32,27 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ closed: 0 })
   }
 
-  // Enqueue close jobs for each expired auction
-  const { auctionCloseQueue } = await import('@/workers/bid-processor')
-  await Promise.all(
-    expiredAuctions.map(a =>
-      auctionCloseQueue.add(
-        'close_auction',
-        { auctionId: a.id },
-        { jobId: `close:${a.id}`, removeOnComplete: true }
-      )
-    )
+  // Close each expired auction directly. Previously this enqueued BullMQ jobs,
+  // but (a) the job IDs contained ':' which BullMQ rejects, so every run 500'd,
+  // and (b) no long-running worker exists on Vercel to consume the queue, so
+  // even valid jobs would never have been processed. closeAuction() is
+  // idempotent (it no-ops unless the auction is still active), so running it
+  // inline here is safe even if another runner races us.
+  const { closeAuction } = await import('@/lib/auction/bid-processor')
+  const results = await Promise.allSettled(
+    expiredAuctions.map(a => closeAuction(a.id))
   )
 
-  return NextResponse.json({ closed: expiredAuctions.length })
+  const closed = results.filter(r => r.status === 'fulfilled').length
+  const failures = results
+    .map((r, i) => (r.status === 'rejected'
+      ? { auctionId: expiredAuctions[i].id, error: r.reason instanceof Error ? r.reason.message : String(r.reason) }
+      : null))
+    .filter(Boolean)
+
+  if (failures.length > 0) {
+    console.error('[close-auctions] failed to close:', JSON.stringify(failures))
+  }
+
+  return NextResponse.json({ closed, failed: failures.length })
 }

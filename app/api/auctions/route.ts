@@ -211,7 +211,8 @@ export async function POST(req: NextRequest) {
       await auctionCloseQueue.add(
         'close_auction',
         { auctionId: auction.id },
-        { delay, jobId: `close:${auction.id}` }
+        // BullMQ rejects custom job IDs containing ':' — use '-' instead.
+        { delay, jobId: `close-${auction.id}` }
       )
     }
   } catch (err) {
